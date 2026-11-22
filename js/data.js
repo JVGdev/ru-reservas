@@ -28,12 +28,18 @@ export const ADICIONAIS = {
 };
 
 // corte: até quando dá para reservar ou cancelar a refeição do dia.
-// fim: quando a reserva passa para "anteriores".
+// fim: quando a refeição termina. Reserva sem check-in até esse horário vira falta.
 // A CONFIRMAR: os cortes repetem os fechamentos do formulário (10h e 16h); o fim é suposição.
 export const REFEICOES = {
   almoco: { nome: 'Almoço', corte: '10:00', fim: '14:00' },
   jantar: { nome: 'Jantar', corte: '16:00', fim: '20:00' },
 };
+
+// Penalidade por falta (RN05). Conta como falta não vir sem cancelar, ou cancelar depois do corte.
+// Ao chegar em `faltas` faltas dentro de `janelaDias`, o desconto de estudante fica bloqueado
+// por `diasBloqueio` dias e a contagem recomeça do zero.
+// A CONFIRMAR: os números são a proposta do grupo; a regra só vale para quem paga preço de estudante.
+export const PENALIDADE = { faltas: 3, janelaDias: 30, diasBloqueio: 7 };
 
 // Os seis símbolos da legenda do cardápio.
 export const TAGS = {

@@ -1,4 +1,4 @@
-import { PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, cardapioDo, semanasDoCalendario } from './data.js';
+import { PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, PENALIDADE, cardapioDo, semanasDoCalendario } from './data.js';
 import * as store from './store.js';
 import * as t from './time.js';
 
@@ -10,6 +10,8 @@ const DIAS_NO_INICIO = 5;
 const escolha = { dia: null, cardapioAberto: false };
 // Folha de reserva rápida aberta.
 const rapida = { dia: null, refeicao: null, extras: new Set() };
+// Refeições marcadas na tela "Vários dias" ("2026-11-23|almoco") e adicionais escolhidos.
+const varias = { selecao: new Set(), extras: new Set() };
 // E-mail digitado na tela de login, mantido se a validação falhar.
 let emailDigitado = '';
 
@@ -54,7 +56,7 @@ function primeiroNome(usuario) {
 }
 
 function situacao(iso, refeicao, agora) {
-  const reserva = store.reservaAtiva(iso, refeicao);
+  const reserva = store.reservaVigente(iso, refeicao);
   if (reserva) return { tipo: 'reservado', reserva };
   const corte = t.at(iso, REFEICOES[refeicao].corte);
   return { tipo: agora < corte ? 'aberto' : 'fechado', corte };
@@ -72,9 +74,21 @@ function terminou(reserva, agora) {
   return agora >= t.at(reserva.data, REFEICOES[reserva.refeicao].fim);
 }
 
+// Dá para cancelar enquanto a refeição não terminou; depois do corte, conta como falta.
 function podeCancelar(reserva, agora) {
-  return reserva.status === 'ativa' && agora < t.at(reserva.data, REFEICOES[reserva.refeicao].corte);
+  return reserva.status === 'ativa' && !terminou(reserva, agora);
 }
+
+function passouCorte(reserva, agora) {
+  return agora >= t.at(reserva.data, REFEICOES[reserva.refeicao].corte);
+}
+
+const dataHora = (ms) => {
+  const d = new Date(ms);
+  return `${t.dataCurta(t.isoDate(d))}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const MOTIVO_FALTA = { 'nao-veio': 'Não veio', 'apos-corte': 'Cancelou depois do corte' };
 
 function ordenar(a, b) {
   return a.data.localeCompare(b.data) || ORDEM_REFEICOES.indexOf(a.refeicao) - ORDEM_REFEICOES.indexOf(b.refeicao);
@@ -100,7 +114,7 @@ function diaPadrao(dias, agora) {
 }
 
 function temReserva(iso) {
-  return ORDEM_REFEICOES.some((r) => store.reservaAtiva(iso, r));
+  return ORDEM_REFEICOES.some((r) => store.reservaVigente(iso, r));
 }
 
 function qrSvg(texto) {
@@ -248,7 +262,7 @@ function cartaoProxima(agora) {
   const quando = t.quando(r.data, agora);
   const cancelar = podeCancelar(r, agora)
     ? `<button type="button" class="link-claro" data-acao="pedir-cancelamento" data-id="${r.id}">
-        ${quando === 'hoje' ? `Cancelar até ${t.hora(ref.corte)}` : 'Cancelar'}</button>`
+        ${quando === 'hoje' && !passouCorte(r, agora) ? `Cancelar até ${t.hora(ref.corte)}` : 'Cancelar'}</button>`
     : '';
   const mais = proximas.length - 1;
 
@@ -351,11 +365,12 @@ function telaInicio() {
         <h1>Olá, ${primeiroNome(usuario)}</h1>
       </div>
     </header>
+    ${avisoFaltas(usuario, agora)}
     ${cartaoProxima(agora)}
     <section class="reservar" aria-labelledby="reservar-titulo">
       <div class="secao-topo">
         <h2 id="reservar-titulo">Reservar</h2>
-        <a href="#/calendario">Calendário</a>
+        <span class="secao-links"><a href="#/varias">Vários dias</a><a href="#/calendario">Calendário</a></span>
       </div>
       ${escolha.dia
         ? `${chipsDias(dias, agora)}${cartaoDia(escolha.dia, agora)}`
@@ -405,9 +420,123 @@ function telaCalendario() {
   pagina('inicio', `
     <header class="topo">${botaoVoltar()}<h1>Calendário</h1></header>
     ${calendario(agora)}
+    <a class="botao secundario" href="#/varias">Reservar vários dias de uma vez</a>
     ${escolha.dia
       ? `<section class="reservar"><h2 class="dia-titulo">${esc(t.dataLonga(escolha.dia))}</h2>${cartaoDia(escolha.dia, agora)}</section>`
       : '<p class="vazio-curto">Nenhum cardápio publicado para os próximos dias.</p>'}`);
+}
+
+// ---------- Vários dias (RF07) ----------
+
+const chave = (iso, r) => `${iso}|${r}`;
+
+// Refeições que ainda dá para reservar, na ordem do calendário.
+function refeicoesAbertas(agora) {
+  return diasDisponiveis(agora).flatMap((iso) =>
+    ORDEM_REFEICOES.filter((r) => situacao(iso, r, agora).tipo === 'aberto').map((r) => chave(iso, r)));
+}
+
+// Tira da seleção o que fechou ou foi reservado enquanto a tela estava aberta.
+function limparSelecao(agora) {
+  const abertas = new Set(refeicoesAbertas(agora));
+  [...varias.selecao].forEach((k) => { if (!abertas.has(k)) varias.selecao.delete(k); });
+}
+
+function totalVarias(agora) {
+  const unitario = store.precoDe(store.usuarioAtual(), [...varias.extras], agora);
+  return { n: varias.selecao.size, total: unitario * varias.selecao.size };
+}
+
+function textoBotaoVarias(agora) {
+  const { n, total } = totalVarias(agora);
+  if (!n) return 'Marque as refeições';
+  return `Reservar ${n} ${n === 1 ? 'refeição' : 'refeições'} · ${reais(total)}`;
+}
+
+function toggleRefeicao(iso, r, agora) {
+  const s = situacao(iso, r, agora);
+  const nome = REFEICOES[r].nome;
+  if (s.tipo === 'reservado') {
+    return `<a class="toggle reservada" href="#/reserva/${s.reserva.id}">${ICONES.check}${nome}<span>Reservado</span></a>`;
+  }
+  if (s.tipo === 'fechado') {
+    return `<span class="toggle fechada" aria-disabled="true">${nome}<span>Fechou</span></span>`;
+  }
+  const marcado = varias.selecao.has(chave(iso, r));
+  return `<button type="button" class="toggle${marcado ? ' marcado' : ''}" data-acao="marcar" data-chave="${chave(iso, r)}"
+    aria-pressed="${marcado}" aria-label="${esc(`${nome}, ${t.dataLonga(iso)}`)}">${ICONES.check}${nome}<span>${textoPrazo(iso, r, agora)}</span></button>`;
+}
+
+function telaVarias() {
+  const agora = t.now();
+  const usuario = store.usuarioAtual();
+  limparSelecao(agora);
+  const dias = diasDisponiveis(agora);
+
+  const linhas = dias.map((iso) => {
+    const menu = cardapioDo(iso, agora);
+    return `<li class="linha-dia">
+      <div class="ld-info">
+        <strong>${esc(t.quando(iso, agora).replace(/^./, (c) => c.toUpperCase()))}</strong>
+        <span class="dica">${esc(menu.pratos[0].nome)}</span>
+      </div>
+      <div class="ld-refeicoes">${ORDEM_REFEICOES.map((r) => toggleRefeicao(iso, r, agora)).join('')}</div>
+    </li>`;
+  }).join('');
+
+  const extras = Object.entries(ADICIONAIS).map(([id, a]) => `
+    <label class="opcao">
+      <input type="checkbox" data-acao="extra-varias" data-extra="${id}" ${varias.extras.has(id) ? 'checked' : ''}>
+      <span class="opcao-nome">${a.nome} em todas</span>
+      <span class="opcao-preco">+ ${reais(a.preco)} cada</span>
+    </label>`).join('');
+
+  pagina('inicio', `
+    <header class="topo">${botaoVoltar()}<h1>Vários dias</h1></header>
+    ${dias.length ? `
+      <div class="atalhos" role="group" aria-label="Marcar de uma vez">
+        <span class="dica">Marcar todos:</span>
+        <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="almoco">Almoços</button>
+        <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="jantar">Jantares</button>
+        <button type="button" class="botao texto pequeno" data-acao="limpar-varias">Limpar</button>
+      </div>
+      <ul class="lista-dias">${linhas}</ul>
+      <div class="opcoes">${extras}</div>
+      <div class="barra-confirmar">
+        <button type="button" class="botao primario grande" data-acao="confirmar-varias" id="confirmar-varias"
+          ${varias.selecao.size ? '' : 'disabled'}>${textoBotaoVarias(agora)}</button>
+        <p class="dica centro">${esc(textoCategoria(usuario, agora))} · pagamento no balcão</p>
+      </div>`
+    : '<p class="vazio-curto">Nenhum cardápio publicado para os próximos dias.</p>'}`);
+}
+
+// Atualiza só o botão de confirmar, sem redesenhar a tela (mantém o foco e a rolagem).
+function atualizarBarraVarias() {
+  const botao = document.getElementById('confirmar-varias');
+  if (!botao) return;
+  botao.textContent = textoBotaoVarias(t.now());
+  botao.disabled = varias.selecao.size === 0;
+}
+
+function confirmarVarias() {
+  const agora = t.now();
+  const pedidas = varias.selecao.size;
+  limparSelecao(agora);
+  const itens = [...varias.selecao].sort().map((k) => {
+    const [data, refeicao] = k.split('|');
+    return { data, refeicao, extras: Object.keys(ADICIONAIS).filter((e) => varias.extras.has(e)) };
+  });
+  if (!itens.length) {
+    toast('Essas refeições fecharam. Escolha outras.');
+    return rota();
+  }
+  store.criarReservas(itens, agora);
+  varias.selecao.clear();
+  varias.extras.clear();
+  const n = itens.length;
+  const fora = pedidas - n;
+  toast(`${n} ${n === 1 ? 'refeição reservada' : 'refeições reservadas'}${fora ? ` (${fora} já tinha${fora === 1 ? '' : 'm'} fechado)` : ''}`);
+  ir('/reservas');
 }
 
 // ---------- Folhas (reserva rápida e cancelamento) ----------
@@ -428,7 +557,14 @@ function fecharFolha() {
 }
 
 function totalRapida() {
-  return store.precoDe(store.usuarioAtual(), [...rapida.extras]);
+  return store.precoDe(store.usuarioAtual(), [...rapida.extras], t.now());
+}
+
+// Nome da categoria que vale agora, com o aviso de desconto bloqueado quando for o caso.
+function textoCategoria(usuario, agora) {
+  const s = store.situacaoFaltas(usuario, agora);
+  if (s.aplica && s.bloqueadoAte) return `Desconto bloqueado até ${t.dataCurta(t.isoDate(new Date(s.bloqueadoAte)))}`;
+  return CATEGORIAS[store.categoriaAplicada(usuario, agora)].nome;
 }
 
 function abrirReserva(dia, refeicao) {
@@ -470,7 +606,7 @@ function abrirReserva(dia, refeicao) {
     <div class="folha-rodape">
       <button type="button" class="botao primario grande" data-acao="confirmar-reserva" id="confirmar-reserva">
         Confirmar · ${reais(totalRapida())}</button>
-      <p class="dica centro">${esc(store.categoriaDe(usuario).nome)} · pagamento no balcão · ${prazo}</p>
+      <p class="dica centro">${esc(textoCategoria(usuario, agora))} · pagamento no balcão · ${prazo}</p>
     </div>`, 'folha-titulo');
   folha.querySelector('#confirmar-reserva').focus();
 }
@@ -484,17 +620,33 @@ function confirmarReserva() {
     return rota();
   }
   const extras = Object.keys(ADICIONAIS).filter((e) => rapida.extras.has(e));
-  store.criarReserva({ data: dia, refeicao, extras });
+  store.criarReserva({ data: dia, refeicao, extras }, t.now());
   toast(`${ref.nome} reservado`);
   rota();
+}
+
+// Texto do que acontece se a pessoa cancelar agora: nada, ou uma falta (e talvez o bloqueio).
+function avisoCancelamento(r, agora) {
+  const corte = t.hora(REFEICOES[r.refeicao].corte);
+  if (!passouCorte(r, agora)) return `<p class="info">Sem penalidade: o prazo vai até ${corte}${t.relativo(r.data, agora) === 'hoje' ? '' : ' do dia'}.</p>`;
+  const s = store.situacaoFaltas(store.usuarioAtual(), agora);
+  const n = s.contando + 1;
+  const bloqueia = s.aplica && !s.bloqueadoAte && n >= s.limite;
+  return `<p class="alerta">Já passou das ${corte}. Cancelar agora conta como falta
+    (${n}ª de ${s.limite} em ${PENALIDADE.janelaDias} dias)${bloqueia
+      ? `<strong> e bloqueia o desconto de estudante por ${PENALIDADE.diasBloqueio} dias</strong>` : ''}.</p>`;
 }
 
 function pedirCancelamento(id) {
   const r = store.buscarReserva(id);
   if (!r) return;
+  const agora = t.now();
+  const comFalta = passouCorte(r, agora);
   const folha = abrirFolha(`
-    <h2 id="folha-titulo">Cancelar o ${REFEICOES[r.refeicao].nome.toLowerCase()} de ${esc(t.quando(r.data, t.now()))}?</h2>
-    <button class="botao perigo-cheio" type="button" data-acao="confirmar-cancelamento" data-id="${r.id}">Cancelar reserva</button>
+    <h2 id="folha-titulo">Cancelar o ${REFEICOES[r.refeicao].nome.toLowerCase()} de ${esc(t.quando(r.data, agora))}?</h2>
+    ${avisoCancelamento(r, agora)}
+    <button class="botao perigo-cheio" type="button" data-acao="confirmar-cancelamento" data-id="${r.id}">
+      ${comFalta ? 'Cancelar mesmo assim' : 'Cancelar reserva'}</button>
     <button class="botao secundario" type="button" data-acao="fechar-folha">Manter reserva</button>`, 'folha-titulo');
   folha.querySelector('[data-acao="fechar-folha"]').focus();
 }
@@ -503,12 +655,13 @@ function confirmarCancelamento(id) {
   fecharFolha();
   const r = store.buscarReserva(id);
   if (!r) return;
-  if (!podeCancelar(r, t.now())) {
-    toast(`O prazo de cancelamento terminou às ${t.hora(REFEICOES[r.refeicao].corte)}.`);
+  const agora = t.now();
+  if (!podeCancelar(r, agora)) {
+    toast('Essa refeição já terminou.');
     return rota();
   }
-  store.cancelarReserva(id);
-  toast('Reserva cancelada');
+  store.cancelarReserva(id, agora);
+  toast(passouCorte(r, agora) ? 'Reserva cancelada. Contou como falta.' : 'Reserva cancelada');
   rota();
 }
 
@@ -516,7 +669,9 @@ function confirmarCancelamento(id) {
 
 function linhaReserva(r, agora) {
   let status = '';
-  if (r.status === 'cancelada') status = '<span class="status cancelada">Cancelada</span>';
+  if (store.faltaDe(r, agora)) status = '<span class="status falta">Falta</span>';
+  else if (r.status === 'cancelada') status = '<span class="status cancelada">Cancelada</span>';
+  else if (r.status === 'utilizada') status = '<span class="status usada">Usada</span>';
   else if (terminou(r, agora)) status = '<span class="status encerrada">Encerrada</span>';
   else if (t.relativo(r.data, agora) === 'hoje') status = '<span class="status hoje">Hoje</span>';
 
@@ -562,9 +717,13 @@ function telaBilhete(id) {
   const cancelavel = podeCancelar(r, agora);
   const rel = t.relativo(r.data, agora);
   const quando = rel || t.dataLonga(r.data).split(',')[0].toLowerCase();
+  const falta = store.faltaDe(r, agora);
 
   let estado = '';
-  if (!ativa) estado = '<p class="selo cancelada">Reserva cancelada</p>';
+  if (r.status === 'utilizada') estado = `<p class="selo usada">${ICONES.check}Check-in às ${dataHora(r.checkinEm).split(', ')[1]}</p>`;
+  else if (falta === 'apos-corte') estado = '<p class="selo falta">Cancelada depois do corte: contou como falta</p>';
+  else if (falta === 'nao-veio') estado = '<p class="selo falta">Falta: a refeição terminou sem check-in</p>';
+  else if (!ativa) estado = '<p class="selo cancelada">Reserva cancelada</p>';
   else if (encerrada) estado = '<p class="selo encerrada">Refeição encerrada</p>';
 
   const qr = ativa && !encerrada
@@ -593,18 +752,65 @@ function telaBilhete(id) {
     </section>
     ${cancelavel ? `
       <button class="botao perigo" type="button" data-acao="pedir-cancelamento" data-id="${r.id}">Cancelar reserva</button>
-      <p class="dica centro">Dá para cancelar até ${t.hora(refeicao.corte)} de ${esc(quando)}.</p>` : ''}
-    ${ativa && !cancelavel && !encerrada ? `<p class="dica centro">O prazo de cancelamento terminou às ${t.hora(refeicao.corte)}.</p>` : ''}
+      <p class="dica centro">${passouCorte(r, agora)
+        ? `O prazo terminou às ${t.hora(refeicao.corte)}. Cancelar agora conta como falta.`
+        : `Dá para cancelar sem penalidade até ${t.hora(refeicao.corte)} de ${esc(quando)}.`}</p>` : ''}
+    ${cancelavel && rel === 'hoje' ? `
+      <section class="cartao demo">
+        <h2>Demonstração</h2>
+        <p class="dica">No sistema real, o caixa lê o QR Code. Aqui dá para simular a leitura; sem ela, a reserva vira falta às ${t.hora(refeicao.fim)}.</p>
+        <button class="botao secundario" type="button" data-acao="checkin" data-id="${r.id}">Simular check-in</button>
+      </section>` : ''}
   `);
 }
 
 // ---------- Perfil ----------
 
+// Cartão de faltas (RF12): quantas contam agora, se o desconto está bloqueado e a lista.
+function cartaoFaltas(u, agora) {
+  const s = store.situacaoFaltas(u, agora);
+  const pontos = Array.from({ length: s.limite }, (_, i) =>
+    `<span class="ponto${i < s.contando ? ' cheio' : ''}"></span>`).join('');
+
+  let situacao;
+  if (!s.aplica) situacao = 'Seu perfil já paga o preço cheio, então as faltas não mudam o valor. Elas ficam registradas para o RU.';
+  else if (s.bloqueadoAte) situacao = `<strong>Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))}.</strong> Reservas feitas até lá custam ${reais(CATEGORIAS.demais.preco)}.`;
+  else if (s.contando === s.limite - 1) situacao = `<strong>Mais uma falta bloqueia o desconto</strong> por ${PENALIDADE.diasBloqueio} dias.`;
+  else situacao = `Com ${s.limite} faltas em ${PENALIDADE.janelaDias} dias, o desconto de estudante fica bloqueado por ${PENALIDADE.diasBloqueio} dias.`;
+
+  const lista = s.faltas.slice(0, 5).map((f) => `<li>
+      <span><strong>${esc(t.dataCurta(f.reserva.data))}</strong> · ${REFEICOES[f.reserva.refeicao].nome}</span>
+      <span class="dica">${MOTIVO_FALTA[f.tipo]}</span></li>`).join('');
+
+  return `<section class="cartao faltas${s.bloqueadoAte && s.aplica ? ' bloqueado' : ''}" aria-labelledby="faltas-titulo">
+    <div class="faltas-topo">
+      <h2 id="faltas-titulo">Faltas</h2>
+      <span class="faltas-conta" aria-label="${s.contando} de ${s.limite} faltas">${pontos}<span>${s.contando} de ${s.limite}</span></span>
+    </div>
+    <p class="dica">${situacao}</p>
+    <p class="dica">Conta como falta não vir sem cancelar, ou cancelar depois do corte.</p>
+    ${lista ? `<ul class="lista-faltas">${lista}</ul>` : ''}
+  </section>`;
+}
+
+// Aviso no Início quando o desconto está bloqueado ou falta uma falta para bloquear.
+function avisoFaltas(u, agora) {
+  const s = store.situacaoFaltas(u, agora);
+  if (!s.aplica) return '';
+  if (s.bloqueadoAte) {
+    return `<a class="aviso-faltas bloqueado" href="#/perfil">Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))} por faltas.</a>`;
+  }
+  if (s.contando === s.limite - 1) {
+    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.contando} faltas. Mais uma bloqueia o desconto por ${PENALIDADE.diasBloqueio} dias.</a>`;
+  }
+  return '';
+}
+
 function telaPerfil() {
   const u = store.usuarioAtual();
   const perfil = store.perfilDe(u);
-  const categoria = store.categoriaDe(u);
   const agora = t.now();
+  const categoria = CATEGORIAS[store.categoriaAplicada(u, agora)];
 
   pagina('perfil', `
     <header class="topo"><h1>Perfil</h1></header>
@@ -614,10 +820,11 @@ function telaPerfil() {
         <div><dt>E-mail</dt><dd>${esc(u.email)}</dd></div>
         <div><dt>Perfil</dt><dd>${esc(perfil.nome)}</dd></div>
         ${perfil.upf && u.matricula ? `<div><dt>Matrícula</dt><dd>${esc(u.matricula)}</dd></div>` : ''}
-        <div><dt>Valor por refeição</dt><dd><strong>${reais(categoria.preco)}</strong> · ${categoria.nome}</dd></div>
+        <div><dt>Valor por refeição</dt><dd><strong>${reais(categoria.preco)}</strong> · ${esc(textoCategoria(u, agora))}</dd></div>
       </dl>
       <a class="botao secundario" href="#/cadastro">Editar dados</a>
     </section>
+    ${cartaoFaltas(u, agora)}
     <button class="botao texto" type="button" data-acao="sair">Sair</button>
 
     <section class="cartao demo">
@@ -642,7 +849,27 @@ const acoes = {
   'outro-email': () => { store.cancelarCodigo(); rota(); },
   voltar: () => {
     const nome = location.hash.slice(2).split('/')[0];
-    ir({ calendario: '/inicio', cadastro: '/perfil', reserva: origemBilhete }[nome] || '/inicio');
+    ir({ calendario: '/inicio', varias: '/inicio', cadastro: '/perfil', reserva: origemBilhete }[nome] || '/inicio');
+  },
+  marcar: (el) => {
+    const k = el.dataset.chave;
+    if (varias.selecao.has(k)) varias.selecao.delete(k);
+    else varias.selecao.add(k);
+    const marcado = varias.selecao.has(k);
+    el.classList.toggle('marcado', marcado);
+    el.setAttribute('aria-pressed', String(marcado));
+    atualizarBarraVarias();
+  },
+  'marcar-todos': (el) => {
+    refeicoesAbertas(t.now()).filter((k) => k.endsWith(`|${el.dataset.refeicao}`)).forEach((k) => varias.selecao.add(k));
+    rota();
+  },
+  'limpar-varias': () => { varias.selecao.clear(); rota(); },
+  'confirmar-varias': confirmarVarias,
+  checkin: (el) => {
+    store.registrarCheckin(el.dataset.id, t.now());
+    toast('Check-in registrado');
+    rota();
   },
   dia: (el) => {
     if (escolha.dia !== el.dataset.dia) {
@@ -682,6 +909,11 @@ document.addEventListener('change', (ev) => {
     else rapida.extras.delete(el.dataset.extra);
     const botao = document.getElementById('confirmar-reserva');
     if (botao) botao.textContent = `Confirmar · ${reais(totalRapida())}`;
+  }
+  if (el.dataset.acao === 'extra-varias') {
+    if (el.checked) varias.extras.add(el.dataset.extra);
+    else varias.extras.delete(el.dataset.extra);
+    atualizarBarraVarias();
   }
   if (el.id === 'perfil' && el.form?.dataset.form === 'cadastro') {
     const perfil = PERFIS.find((p) => p.id === el.value);
@@ -773,6 +1005,7 @@ function rota() {
     switch (nome) {
       case 'inicio': telaInicio(); break;
       case 'calendario': telaCalendario(); break;
+      case 'varias': telaVarias(); break;
       case 'reservas': telaReservas(); break;
       case 'reserva': telaBilhete(param); break;
       case 'perfil': telaPerfil(); break;
