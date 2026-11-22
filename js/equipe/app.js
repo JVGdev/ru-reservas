@@ -66,10 +66,13 @@ function telaEntrar() {
 function avisoSimulacao(papel) {
   if (!t.simulando()) return '';
   const agora = t.now();
-  const texto = `${ICONES.relogio}<span>Horário simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}</span>`;
+  const frase = `Horário simulado: ${t.dataCurta(t.isoDate(agora))}, ${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+  // No celular só o ícone aparece; o rótulo e o title mantêm o texto.
+  const attrs = `class="eq-simulado" aria-label="${esc(frase)}" title="${esc(frase)}"`;
+  const texto = `${ICONES.relogio}<span aria-hidden="true">${esc(frase)}</span>`;
   return papel === 'gerencia'
-    ? `<a class="eq-simulado" href="#/ajustes">${texto}</a>`
-    : `<p class="eq-simulado">${texto}</p>`;
+    ? `<a ${attrs} href="#/ajustes">${texto}</a>`
+    : `<p ${attrs} role="note">${texto}</p>`;
 }
 
 function moldura(papel, secao, conteudo) {

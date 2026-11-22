@@ -770,7 +770,7 @@ function telaBilhete(id) {
   const falta = store.faltaDe(r, agora);
 
   let estado = '';
-  if (r.status === 'utilizada') estado = `<p class="selo usada">${ICONES.check}Check-in às ${dataHora(r.checkinEm).split(', ')[1]}</p>`;
+  if (r.status === 'utilizada') estado = `<p class="selo usada">${ICONES.check}Check-in às ${dataHora(r.checkinEm).split(', ').at(-1)}</p>`;
   else if (falta === 'apos-corte') estado = '<p class="selo falta">Cancelada depois do corte: contou como falta</p>';
   else if (falta === 'nao-veio') estado = '<p class="selo falta">Falta: a refeição terminou sem check-in</p>';
   else if (!ativa) estado = '<p class="selo cancelada">Reserva cancelada</p>';
@@ -797,7 +797,7 @@ function telaBilhete(id) {
         <div><dt>Perfil</dt><dd>${esc(store.perfilDe(usuario).nome)}</dd></div>
         <div><dt>Adicionais</dt><dd>${textoExtras(r.extras)}</dd></div>
         <div><dt>Valor</dt><dd><strong>${reais(r.valor)}</strong> · ${CATEGORIAS[r.categoria].nome}</dd></div>
-        <div><dt>Pagamento</dt><dd>${r.pagamento ? `Pago · ${FORMAS_PAGAMENTO[r.pagamento.forma]}` : 'No balcão: dinheiro, PIX ou cartão'}</dd></div>
+        <div><dt>Pagamento</dt><dd>${r.pagamento ? `Pago · ${FORMAS_PAGAMENTO[r.pagamento.forma]}` : 'No balcão<br><span class="dica">dinheiro, PIX ou cartão</span>'}</dd></div>
       </dl>
     </section>
     ${cancelavel ? `
@@ -853,7 +853,7 @@ function avisoFaltas(u, agora) {
     return `<a class="aviso-faltas bloqueado" href="#/perfil">Por causa das faltas, ${s.pendentes === 1 ? 'a próxima reserva fica' : `as próximas ${s.pendentes} reservas ficam`} sem o desconto de estudante.</a>`;
   }
   if (s.total === s.limite - 1) {
-    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.total} faltas. Na próxima, a reserva seguinte fica sem desconto.</a>`;
+    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.total} faltas. Com mais uma, a reserva seguinte fica sem o desconto de estudante.</a>`;
   }
   return '';
 }
