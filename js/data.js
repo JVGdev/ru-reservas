@@ -1,16 +1,20 @@
 // Configuração e dados simulados do protótipo.
 // Tudo que depende de resposta do Pedro está marcado com "A CONFIRMAR".
+// Os valores abaixo são o padrão. A tela Ajustes da equipe pode mudá-los (chave ru.ajustes).
 
-import { isoDate, addDays, startOfWeek } from './time.js';
+import { isoDate, addDays, startOfWeek, parseISO } from './time.js';
+import { ler, gravar } from './armazem.js';
 
 // Valores em centavos, para evitar erro de arredondamento.
+// RN01: R$ 10 para estudantes, R$ 15 para funcionários e R$ 20 para os demais.
 export const CATEGORIAS = {
   estudante: { nome: 'Estudante', preco: 1000 },
+  funcionario: { nome: 'Funcionário', preco: 1500 },
   demais: { nome: 'Demais clientes', preco: 2000 },
 };
 
 // Os 8 perfis do formulário atual.
-// A CONFIRMAR: quais perfis pagam preço de estudante, e se funcionário paga R$ 15.
+// A CONFIRMAR: quais perfis pagam preço de estudante.
 export const PERFIS = [
   { id: 'graduacao', nome: 'Aluno de graduação', categoria: 'estudante', upf: true },
   { id: 'pos', nome: 'Aluno de pós-graduação', categoria: 'estudante', upf: true },
@@ -18,7 +22,7 @@ export const PERFIS = [
   { id: 'integrado', nome: 'Aluno Integrado', categoria: 'estudante', upf: true },
   { id: 'rede', nome: 'Estudante da rede municipal/estadual', categoria: 'estudante', upf: false },
   { id: 'residente', nome: 'Residente multiprofissional', categoria: 'demais', upf: true },
-  { id: 'funcionario', nome: 'Funcionário UPF', categoria: 'demais', upf: true },
+  { id: 'funcionario', nome: 'Funcionário UPF', categoria: 'funcionario', upf: true },
   { id: 'externo', nome: 'Professor ou comunidade externa', categoria: 'demais', upf: false },
 ];
 
@@ -35,11 +39,17 @@ export const REFEICOES = {
   jantar: { nome: 'Jantar', corte: '16:00', fim: '20:00' },
 };
 
+// Dias da semana com refeição (0 = domingo).
+export const FUNCIONAMENTO = { dias: [1, 2, 3, 4, 5] };
+
 // Penalidade por falta (RN05). Conta como falta não vir sem cancelar, ou cancelar depois do corte.
-// Ao chegar em `faltas` faltas dentro de `janelaDias`, o desconto de estudante fica bloqueado
-// por `diasBloqueio` dias e a contagem recomeça do zero.
-// A CONFIRMAR: os números são a proposta do grupo; a regra só vale para quem paga preço de estudante.
-export const PENALIDADE = { faltas: 3, janelaDias: 30, diasBloqueio: 7 };
+// Regra "1 para 1": a partir da falta número `faltas`, cada falta tira o desconto de estudante
+// da reserva seguinte, e só dela. Só vale para quem paga preço de estudante.
+// A CONFIRMAR: se a contagem de faltas zera em algum momento (hoje não zera).
+export const PENALIDADE = { faltas: 3 };
+
+// A primeira é a principal no balcão (botão maior no Atendimento).
+export const FORMAS_PAGAMENTO = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito' };
 
 // Os seis símbolos da legenda do cardápio.
 export const TAGS = {
@@ -52,6 +62,71 @@ export const TAGS = {
 };
 
 export const ACOMPANHAMENTO = { nome: 'Arroz branco, arroz integral e feijão', tags: ['vegano'] };
+
+// ---------- Ajustes (tela Ajustes da equipe) ----------
+
+const K_AJUSTES = 'ru.ajustes';
+
+export function ajustes() {
+  return {
+    precos: {
+      estudante: CATEGORIAS.estudante.preco,
+      funcionario: CATEGORIAS.funcionario.preco,
+      demais: CATEGORIAS.demais.preco,
+      marmita: ADICIONAIS.marmita.preco,
+      suco: ADICIONAIS.suco.preco,
+    },
+    perfis: Object.fromEntries(PERFIS.map((p) => [p.id, p.categoria])),
+    refeicoes: Object.fromEntries(Object.entries(REFEICOES).map(([id, r]) => [id, { corte: r.corte, fim: r.fim }])),
+    dias: [...FUNCIONAMENTO.dias],
+    penalidade: { ...PENALIDADE },
+  };
+}
+
+const PADRAO = ajustes();
+
+function aplicar(a) {
+  CATEGORIAS.estudante.preco = a.precos.estudante;
+  CATEGORIAS.funcionario.preco = a.precos.funcionario;
+  CATEGORIAS.demais.preco = a.precos.demais;
+  ADICIONAIS.marmita.preco = a.precos.marmita;
+  ADICIONAIS.suco.preco = a.precos.suco;
+  PERFIS.forEach((p) => { p.categoria = a.perfis[p.id] || p.categoria; });
+  Object.entries(a.refeicoes).forEach(([id, r]) => { if (REFEICOES[id]) Object.assign(REFEICOES[id], r); });
+  FUNCIONAMENTO.dias = [...a.dias];
+  Object.assign(PENALIDADE, a.penalidade);
+}
+
+function comPadrao(salvo) {
+  const refeicoes = Object.fromEntries(Object.entries(PADRAO.refeicoes)
+    .map(([id, r]) => [id, { ...r, ...salvo.refeicoes?.[id] }]));
+  return {
+    precos: { ...PADRAO.precos, ...salvo.precos },
+    perfis: { ...PADRAO.perfis, ...salvo.perfis },
+    refeicoes,
+    dias: salvo.dias || PADRAO.dias,
+    penalidade: { ...PADRAO.penalidade, ...salvo.penalidade },
+  };
+}
+
+export function carregarAjustes() {
+  const salvo = ler(K_AJUSTES, null);
+  aplicar(salvo ? comPadrao(salvo) : PADRAO);
+}
+
+export function salvarAjustes(a) {
+  gravar(K_AJUSTES, a);
+  carregarAjustes();
+}
+
+export function restaurarAjustes() {
+  gravar(K_AJUSTES, null);
+  carregarAjustes();
+}
+
+carregarAjustes();
+
+// ---------- Cardápios ----------
 
 const p = (nome, ...tags) => ({ nome, tags });
 
@@ -89,23 +164,60 @@ const MODELOS = [
     suco: p('Caju', 'vegano') },
 ];
 
-// Semanas publicadas: a atual e a próxima. A terceira semana do calendário fica sem cardápio.
-export const SEMANAS_PUBLICADAS = 2;
+// Sem nada salvo, a semana atual e a seguinte usam os cardápios de exemplo e já saem publicadas.
+const SEMANAS_DE_EXEMPLO = 2;
 export const SEMANAS_NO_CALENDARIO = 3;
 
-function diaUtil(data) {
-  const d = data.getDay();
-  return d >= 1 && d <= 5;
+const K_CARDAPIOS = 'ru.cardapios';
+const K_PUBLICACAO = 'ru.publicacao';
+
+export function diaDeFuncionamento(iso) {
+  return FUNCIONAMENTO.dias.includes(parseISO(iso).getDay());
 }
 
-export function cardapioDo(iso, hoje) {
+// Domingo da semana do dia, em ISO.
+export function semanaDe(iso) {
+  return isoDate(startOfWeek(parseISO(iso)));
+}
+
+function semanaDeExemplo(iso, hoje) {
   const inicio = startOfWeek(hoje);
-  const limite = addDays(inicio, SEMANAS_PUBLICADAS * 7);
+  const data = parseISO(iso);
+  return data >= inicio && data < addDays(inicio, SEMANAS_DE_EXEMPLO * 7);
+}
+
+function exemploDo(iso) {
   const [y, m, d] = iso.split('-').map(Number);
-  const data = new Date(y, m - 1, d);
-  if (!diaUtil(data) || data < inicio || data >= limite) return null;
   const n = Math.floor(Date.UTC(y, m - 1, d) / 86400000);
-  return MODELOS[n % MODELOS.length];
+  return structuredClone(MODELOS[n % MODELOS.length]);
+}
+
+// Cardápio do dia, publicado ou não. null quando o dia não tem cardápio.
+// pratos: [principal, segunda opção, guarnição]; as duas últimas podem ser null. suco pode ser null.
+export function menuDo(iso, hoje) {
+  if (!diaDeFuncionamento(iso)) return null;
+  const salvos = ler(K_CARDAPIOS, {});
+  if (iso in salvos) return salvos[iso];
+  return semanaDeExemplo(iso, hoje) ? exemploDo(iso) : null;
+}
+
+export function semanaPublicada(semana, hoje) {
+  const publicacao = ler(K_PUBLICACAO, {});
+  return semana in publicacao ? publicacao[semana] : semanaDeExemplo(semana, hoje);
+}
+
+// O que quem reserva vê: só cardápios de semanas publicadas.
+export function cardapioDo(iso, hoje) {
+  return semanaPublicada(semanaDe(iso), hoje) ? menuDo(iso, hoje) : null;
+}
+
+// menu null deixa o dia sem cardápio.
+export function salvarCardapio(iso, menu) {
+  gravar(K_CARDAPIOS, { ...ler(K_CARDAPIOS, {}), [iso]: menu });
+}
+
+export function publicarSemana(semana, publicada) {
+  gravar(K_PUBLICACAO, { ...ler(K_PUBLICACAO, {}), [semana]: publicada });
 }
 
 // Semanas (domingo a sábado) mostradas no calendário, a partir da semana atual.

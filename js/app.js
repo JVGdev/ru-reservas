@@ -1,6 +1,10 @@
-import { PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, PENALIDADE, cardapioDo, semanasDoCalendario } from './data.js';
+import {
+  PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, FORMAS_PAGAMENTO,
+  cardapioDo, semanasDoCalendario,
+} from './data.js';
 import * as store from './store.js';
 import * as t from './time.js';
+import { esc, reais, toast } from './ui.js';
 
 const app = document.getElementById('app');
 const ORDEM_REFEICOES = Object.keys(REFEICOES);
@@ -17,11 +21,6 @@ let emailDigitado = '';
 
 // ---------- Utilidades ----------
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-const reais = (centavos) => (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
 const minuscula = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const ICONES = {
@@ -35,15 +34,6 @@ const ICONES = {
   fechar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   relogio: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
-
-let toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('visivel');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('visivel'), 2800);
-}
 
 function ir(caminho, substituir = false) {
   if (location.hash === `#${caminho}`) return rota();
@@ -180,6 +170,7 @@ function telaEntrar() {
         <p class="erro" id="erro" hidden></p>
         <button class="botao primario" type="submit">Receber código</button>
       </form>
+      <a class="link link-equipe" href="equipe.html">Área da equipe do RU</a>
     </main>`;
     return;
   }
@@ -307,11 +298,9 @@ function itemCardapio(item) {
 function cardapioCompleto(menu) {
   return `<div class="cardapio">
     <h3>Prato do dia</h3>
-    <ul>${[ACOMPANHAMENTO, ...menu.pratos].map(itemCardapio).join('')}</ul>
-    <h3>Saladas</h3>
-    <ul>${menu.saladas.map(itemCardapio).join('')}</ul>
-    <h3>Suco</h3>
-    <ul>${itemCardapio(menu.suco)}</ul>
+    <ul>${[ACOMPANHAMENTO, ...menu.pratos].filter(Boolean).map(itemCardapio).join('')}</ul>
+    ${menu.saladas.length ? `<h3>Saladas</h3><ul>${menu.saladas.map(itemCardapio).join('')}</ul>` : ''}
+    ${menu.suco ? `<h3>Suco</h3><ul>${itemCardapio(menu.suco)}</ul>` : ''}
   </div>`;
 }
 
@@ -443,8 +432,11 @@ function limparSelecao(agora) {
 }
 
 function totalVarias(agora) {
-  const unitario = store.precoDe(store.usuarioAtual(), [...varias.extras], agora);
-  return { n: varias.selecao.size, total: unitario * varias.selecao.size };
+  const n = varias.selecao.size;
+  const extras = [...varias.extras].reduce((soma, e) => soma + ADICIONAIS[e].preco, 0);
+  const total = store.categoriasDasProximas(store.usuarioAtual(), n, agora)
+    .reduce((soma, c) => soma + CATEGORIAS[c].preco + extras, 0);
+  return { n, total };
 }
 
 function textoBotaoVarias(agora) {
@@ -563,7 +555,7 @@ function totalRapida() {
 // Nome da categoria que vale agora, com o aviso de desconto bloqueado quando for o caso.
 function textoCategoria(usuario, agora) {
   const s = store.situacaoFaltas(usuario, agora);
-  if (s.aplica && s.bloqueadoAte) return `Desconto bloqueado até ${t.dataCurta(t.isoDate(new Date(s.bloqueadoAte)))}`;
+  if (s.aplica && s.pendentes) return s.pendentes === 1 ? 'Sem desconto nesta reserva (falta)' : `Sem desconto nas próximas ${s.pendentes} reservas (faltas)`;
   return CATEGORIAS[store.categoriaAplicada(usuario, agora)].nome;
 }
 
@@ -600,7 +592,12 @@ function abrirReserva(dia, refeicao) {
     <div class="resumo-menu">
       <div class="resumo-linha"><strong>${esc(principal.nome)}</strong><span class="tags">${tags(principal)}</span></div>
       ${opcao ? `<div class="resumo-linha"><span>${esc(opcao.nome)}</span><span class="tags">${tags(opcao)}</span></div>` : ''}
-      <p class="dica">${guarnicao ? `${esc(guarnicao.nome)} · ` : ''}arroz e feijão · ${menu.saladas.length} saladas · suco de ${esc(minuscula(menu.suco.nome))}</p>
+      <p class="dica">${[
+        guarnicao && esc(guarnicao.nome),
+        'arroz e feijão',
+        menu.saladas.length && `${menu.saladas.length} ${menu.saladas.length === 1 ? 'salada' : 'saladas'}`,
+        menu.suco && `suco de ${esc(minuscula(menu.suco.nome))}`,
+      ].filter(Boolean).join(' · ')}</p>
     </div>
     <div class="opcoes">${extras}</div>
     <div class="folha-rodape">
@@ -630,11 +627,10 @@ function avisoCancelamento(r, agora) {
   const corte = t.hora(REFEICOES[r.refeicao].corte);
   if (!passouCorte(r, agora)) return `<p class="info">Sem penalidade: o prazo vai até ${corte}${t.relativo(r.data, agora) === 'hoje' ? '' : ' do dia'}.</p>`;
   const s = store.situacaoFaltas(store.usuarioAtual(), agora);
-  const n = s.contando + 1;
-  const bloqueia = s.aplica && !s.bloqueadoAte && n >= s.limite;
-  return `<p class="alerta">Já passou das ${corte}. Cancelar agora conta como falta
-    (${n}ª de ${s.limite} em ${PENALIDADE.janelaDias} dias)${bloqueia
-      ? `<strong> e bloqueia o desconto de estudante por ${PENALIDADE.diasBloqueio} dias</strong>` : ''}.</p>`;
+  const n = s.total + 1;
+  const penaliza = s.aplica && n >= s.limite;
+  return `<p class="alerta">Já passou das ${corte}. Cancelar agora conta como falta (${n}ª)${penaliza
+    ? '<strong> e a sua próxima reserva fica sem o desconto de estudante</strong>' : ''}.</p>`;
 }
 
 function pedirCancelamento(id) {
@@ -747,7 +743,7 @@ function telaBilhete(id) {
         <div><dt>Perfil</dt><dd>${esc(store.perfilDe(usuario).nome)}</dd></div>
         <div><dt>Adicionais</dt><dd>${textoExtras(r.extras)}</dd></div>
         <div><dt>Valor</dt><dd><strong>${reais(r.valor)}</strong> · ${CATEGORIAS[r.categoria].nome}</dd></div>
-        <div><dt>Pagamento</dt><dd>No balcão</dd></div>
+        <div><dt>Pagamento</dt><dd>${r.pagamento ? `Pago · ${FORMAS_PAGAMENTO[r.pagamento.forma]}` : 'No balcão: dinheiro, PIX ou cartão'}</dd></div>
       </dl>
     </section>
     ${cancelavel ? `
@@ -766,26 +762,28 @@ function telaBilhete(id) {
 
 // ---------- Perfil ----------
 
-// Cartão de faltas (RF12): quantas contam agora, se o desconto está bloqueado e a lista.
+// Cartão de faltas (RF12): quantas faltas a pessoa tem e se a próxima reserva fica sem desconto.
 function cartaoFaltas(u, agora) {
   const s = store.situacaoFaltas(u, agora);
   const pontos = Array.from({ length: s.limite }, (_, i) =>
-    `<span class="ponto${i < s.contando ? ' cheio' : ''}"></span>`).join('');
+    `<span class="ponto${i < s.total ? ' cheio' : ''}"></span>`).join('');
 
   let situacao;
-  if (!s.aplica) situacao = 'Seu perfil já paga o preço cheio, então as faltas não mudam o valor. Elas ficam registradas para o RU.';
-  else if (s.bloqueadoAte) situacao = `<strong>Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))}.</strong> Reservas feitas até lá custam ${reais(CATEGORIAS.demais.preco)}.`;
-  else if (s.contando === s.limite - 1) situacao = `<strong>Mais uma falta bloqueia o desconto</strong> por ${PENALIDADE.diasBloqueio} dias.`;
-  else situacao = `Com ${s.limite} faltas em ${PENALIDADE.janelaDias} dias, o desconto de estudante fica bloqueado por ${PENALIDADE.diasBloqueio} dias.`;
+  if (!s.aplica) situacao = 'Seu perfil não tem desconto de estudante, então as faltas não mudam o valor. Elas ficam registradas para o RU.';
+  else if (s.pendentes) {
+    situacao = `<strong>${s.pendentes === 1 ? 'Sua próxima reserva fica' : `Suas próximas ${s.pendentes} reservas ficam`} sem o desconto de estudante</strong> (${reais(CATEGORIAS.demais.preco)}).`;
+  } else if (s.total >= s.limite) situacao = 'Cada nova falta tira o desconto de estudante da reserva seguinte.';
+  else if (s.total === s.limite - 1) situacao = '<strong>Na próxima falta</strong>, a reserva seguinte fica sem o desconto de estudante.';
+  else situacao = `A partir da ${s.limite}ª falta, cada falta tira o desconto de estudante da reserva seguinte.`;
 
   const lista = s.faltas.slice(0, 5).map((f) => `<li>
       <span><strong>${esc(t.dataCurta(f.reserva.data))}</strong> · ${REFEICOES[f.reserva.refeicao].nome}</span>
       <span class="dica">${MOTIVO_FALTA[f.tipo]}</span></li>`).join('');
 
-  return `<section class="cartao faltas${s.bloqueadoAte && s.aplica ? ' bloqueado' : ''}" aria-labelledby="faltas-titulo">
+  return `<section class="cartao faltas${s.pendentes && s.aplica ? ' bloqueado' : ''}" aria-labelledby="faltas-titulo">
     <div class="faltas-topo">
       <h2 id="faltas-titulo">Faltas</h2>
-      <span class="faltas-conta" aria-label="${s.contando} de ${s.limite} faltas">${pontos}<span>${s.contando} de ${s.limite}</span></span>
+      <span class="faltas-conta" aria-label="${s.total} ${s.total === 1 ? 'falta' : 'faltas'}">${pontos}<span>${s.total}</span></span>
     </div>
     <p class="dica">${situacao}</p>
     <p class="dica">Conta como falta não vir sem cancelar, ou cancelar depois do corte.</p>
@@ -793,15 +791,15 @@ function cartaoFaltas(u, agora) {
   </section>`;
 }
 
-// Aviso no Início quando o desconto está bloqueado ou falta uma falta para bloquear.
+// Aviso no Início quando a próxima reserva fica sem desconto ou falta uma falta para isso.
 function avisoFaltas(u, agora) {
   const s = store.situacaoFaltas(u, agora);
   if (!s.aplica) return '';
-  if (s.bloqueadoAte) {
-    return `<a class="aviso-faltas bloqueado" href="#/perfil">Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))} por faltas.</a>`;
+  if (s.pendentes) {
+    return `<a class="aviso-faltas bloqueado" href="#/perfil">Por causa das faltas, ${s.pendentes === 1 ? 'a próxima reserva fica' : `as próximas ${s.pendentes} reservas ficam`} sem o desconto de estudante.</a>`;
   }
-  if (s.contando === s.limite - 1) {
-    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.contando} faltas. Mais uma bloqueia o desconto por ${PENALIDADE.diasBloqueio} dias.</a>`;
+  if (s.total === s.limite - 1) {
+    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.total} faltas. Na próxima, a reserva seguinte fica sem desconto.</a>`;
   }
   return '';
 }
@@ -838,6 +836,7 @@ function telaPerfil() {
           ${t.simulando() ? '<button class="botao texto" type="button" data-acao="horario-real">Usar horário real</button>' : ''}
         </div>
       </form>
+      <a class="botao texto" href="equipe.html">Abrir a área da equipe</a>
       <button class="botao texto perigo-texto" type="button" data-acao="apagar-tudo">Apagar todos os dados</button>
     </section>
   `);
