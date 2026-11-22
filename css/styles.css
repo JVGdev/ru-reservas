@@ -410,6 +410,25 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 .atalhos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .atalhos .botao.texto { margin-left: auto; padding: 0 4px; }
 
+.semanas-varias { display: flex; flex-direction: column; gap: 10px; }
+.semana-varias summary {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 8px 14px;
+  background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio);
+  list-style: none; cursor: pointer;
+}
+.semana-varias summary::-webkit-details-marker { display: none; }
+.semana-varias[open] summary { margin-bottom: 8px; }
+.sv-titulo { flex: 1; display: flex; flex-direction: column; }
+.sv-titulo strong { font-family: var(--fonte-titulo); font-weight: 400; font-size: 1.1rem; color: var(--verde-escuro); }
+.sv-conta:not(:empty) {
+  font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  background: var(--verde-claro); color: var(--verde-escuro); white-space: nowrap;
+}
+.sv-seta { display: flex; color: var(--verde-escuro); transition: rotate 0.15s; }
+.sv-seta svg { width: 18px; height: 18px; }
+.semana-varias[open] .sv-seta { rotate: 90deg; }
+
 .lista-dias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .linha-dia {
   display: flex; flex-direction: column; gap: 10px;

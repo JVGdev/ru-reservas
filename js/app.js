@@ -1,6 +1,6 @@
 import {
   PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, FORMAS_PAGAMENTO,
-  cardapioDo, semanasDoCalendario,
+  cardapioDo, semanasDoCalendario, semanaDe,
 } from './data.js';
 import * as store from './store.js';
 import * as t from './time.js';
@@ -15,7 +15,8 @@ const escolha = { dia: null, cardapioAberto: false };
 // Folha de reserva rápida aberta.
 const rapida = { dia: null, refeicao: null, extras: new Set() };
 // Refeições marcadas na tela "Vários dias" ("2026-11-23|almoco") e adicionais escolhidos.
-const varias = { selecao: new Set(), extras: new Set() };
+// `abertas`: semanas expandidas na tela (null = só a primeira, na primeira visita).
+const varias = { selecao: new Set(), extras: new Set(), abertas: null };
 // E-mail digitado na tela de login, mantido se a validação falhar.
 let emailDigitado = '';
 
@@ -465,13 +466,26 @@ function toggleRefeicao(iso, r, agora) {
     aria-pressed="${marcado}" aria-label="${esc(`${nome}, ${t.dataLonga(iso)}`)}">${ICONES.check}${nome}<span>${textoPrazo(iso, r, agora)}</span></button>`;
 }
 
+function nomeSemana(semana, agora) {
+  const atual = semanaDe(t.isoDate(agora));
+  if (semana === atual) return 'Esta semana';
+  if (semana === t.isoDate(t.addDays(t.parseISO(atual), 7))) return 'Próxima semana';
+  return `Semana de ${semana.slice(8)}/${semana.slice(5, 7)}`;
+}
+
+// "2 marcadas" para o resumo da semana (vazio quando nada está marcado).
+function textoMarcadas(semana) {
+  const n = [...varias.selecao].filter((k) => semanaDe(k.split('|')[0]) === semana).length;
+  return n ? `${n} ${n === 1 ? 'marcada' : 'marcadas'}` : '';
+}
+
 function telaVarias() {
   const agora = t.now();
   const usuario = store.usuarioAtual();
   limparSelecao(agora);
   const dias = diasDisponiveis(agora);
 
-  const linhas = dias.map((iso) => {
+  const linha = (iso) => {
     const menu = cardapioDo(iso, agora);
     return `<li class="linha-dia">
       <div class="ld-info">
@@ -480,7 +494,26 @@ function telaVarias() {
       </div>
       <div class="ld-refeicoes">${ORDEM_REFEICOES.map((r) => toggleRefeicao(iso, r, agora)).join('')}</div>
     </li>`;
-  }).join('');
+  };
+
+  // Uma seção recolhível por semana. Começa com a primeira aberta.
+  const semanas = new Map();
+  dias.forEach((iso) => {
+    const s = semanaDe(iso);
+    if (!semanas.has(s)) semanas.set(s, []);
+    semanas.get(s).push(iso);
+  });
+  if (!varias.abertas) varias.abertas = new Set([...semanas.keys()].slice(0, 1));
+  const ddmm = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
+  const secoes = [...semanas].map(([semana, ds]) => `
+    <details class="semana-varias" data-semana="${semana}" ${varias.abertas.has(semana) ? 'open' : ''}>
+      <summary>
+        <span class="sv-titulo"><strong>${esc(nomeSemana(semana, agora))}</strong><span class="dica">${ddmm(ds[0])} a ${ddmm(ds.at(-1))}</span></span>
+        <span class="sv-conta" data-conta="${semana}">${textoMarcadas(semana)}</span>
+        <span class="sv-seta" aria-hidden="true">${ICONES.seta}</span>
+      </summary>
+      <ul class="lista-dias">${ds.map(linha).join('')}</ul>
+    </details>`).join('');
 
   const extras = Object.entries(ADICIONAIS).map(([id, a]) => `
     <label class="opcao">
@@ -498,7 +531,7 @@ function telaVarias() {
         <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="jantar">Jantares</button>
         <button type="button" class="botao texto pequeno" data-acao="limpar-varias">Limpar</button>
       </div>
-      <ul class="lista-dias">${linhas}</ul>
+      <div class="semanas-varias">${secoes}</div>
       <div class="opcoes">${extras}</div>
       <div class="barra-confirmar">
         <button type="button" class="botao primario grande" data-acao="confirmar-varias" id="confirmar-varias"
@@ -514,6 +547,7 @@ function atualizarBarraVarias() {
   if (!botao) return;
   botao.textContent = textoBotaoVarias(t.now());
   botao.disabled = varias.selecao.size === 0;
+  document.querySelectorAll('[data-conta]').forEach((el) => { el.textContent = textoMarcadas(el.dataset.conta); });
 }
 
 function confirmarVarias() {
@@ -905,6 +939,15 @@ document.addEventListener('click', (ev) => {
   const acao = acoes[el.dataset.acao];
   if (acao) { ev.preventDefault(); acao(el); }
 });
+
+// Lembra quais semanas estão abertas, para a tela redesenhar do mesmo jeito.
+// O evento "toggle" não sobe pela árvore, então é ouvido na captura.
+document.addEventListener('toggle', (ev) => {
+  const el = ev.target;
+  if (!el.matches?.('details.semana-varias') || !varias.abertas) return;
+  if (el.open) varias.abertas.add(el.dataset.semana);
+  else varias.abertas.delete(el.dataset.semana);
+}, true);
 
 document.addEventListener('change', (ev) => {
   const el = ev.target;
