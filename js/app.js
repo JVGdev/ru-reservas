@@ -446,19 +446,24 @@ function textoBotaoVarias(agora) {
   return `Reservar ${n} ${n === 1 ? 'refeição' : 'refeições'} · ${reais(total)}`;
 }
 
-// Uma célula da grade: marcar/desmarcar, ou o estado quando não dá para marcar.
+// Uma célula da grade, com o mesmo botão de refeição do Início: marcar/desmarcar,
+// ou o estado quando não dá para marcar.
 function celulaVarias(iso, r, agora) {
   const s = situacao(iso, r, agora);
-  const rotulo = `${REFEICOES[r].nome}, ${t.dataLonga(iso)}`;
+  const nome = REFEICOES[r].nome;
+  const rotulo = `${nome}, ${t.dataLonga(iso)}`;
   if (s.tipo === 'reservado') {
-    return `<a class="celula reservada" href="#/reserva/${s.reserva.id}" aria-label="${esc(`${rotulo}: reservado`)}">${ICONES.check}<span>Reservado</span></a>`;
+    return `<a class="refeicao reservada compacta" href="#/reserva/${s.reserva.id}" aria-label="${esc(`${rotulo}: reservado`)}">
+      <span class="ref-nome">${ICONES.check}${nome}</span><span class="ref-status">Reservado</span></a>`;
   }
   if (s.tipo === 'fechado') {
-    return `<span class="celula fechada" aria-label="${esc(`${rotulo}: fechou`)}"><span>Fechou</span></span>`;
+    return `<span class="refeicao fechada compacta" aria-label="${esc(`${rotulo}: fechou`)}">
+      <span class="ref-nome">${nome}</span><span class="ref-status">Fechou</span></span>`;
   }
   const marcado = varias.selecao.has(chave(iso, r));
-  return `<button type="button" class="celula${marcado ? ' marcado' : ''}" data-acao="marcar" data-chave="${chave(iso, r)}"
-    data-semana="${semanaDe(iso)}" data-refeicao="${r}" aria-pressed="${marcado}" aria-label="${esc(rotulo)}">${ICONES.check}</button>`;
+  return `<button type="button" class="refeicao compacta${marcado ? ' marcado' : ''}" data-acao="marcar" data-chave="${chave(iso, r)}"
+    data-semana="${semanaDe(iso)}" data-refeicao="${r}" aria-pressed="${marcado}" aria-label="${esc(rotulo)}">
+    <span class="ref-nome"><span class="i-mais">${ICONES.mais}</span><span class="i-check">${ICONES.check}</span>${nome}</span></button>`;
 }
 
 // Chaves das refeições abertas de uma semana, só de um tipo (almoço ou jantar).
@@ -485,7 +490,7 @@ function semanaVarias(semana, dias, agora) {
   const cabeca = ORDEM_REFEICOES.map((r) => {
     const abertas = abertasDaColuna(semana, r, agora);
     const nome = PLURAIS[r] || REFEICOES[r].nome;
-    return `<button type="button" class="coluna" data-acao="marcar-coluna" data-semana="${semana}" data-refeicao="${r}"
+    return `<button type="button" class="botao secundario pequeno coluna" data-acao="marcar-coluna" data-semana="${semana}" data-refeicao="${r}"
       aria-pressed="${colunaCheia(semana, r, agora)}" ${abertas.length ? '' : 'disabled'}
       aria-label="${esc(`Marcar todos os ${nome.toLowerCase()} da semana`)}">${nome}</button>`;
   }).join('');
@@ -914,7 +919,7 @@ const acoes = {
     const { semana, refeicao } = el.dataset;
     const cheia = colunaCheia(semana, refeicao, agora);
     abertasDaColuna(semana, refeicao, agora).forEach((k) => (cheia ? varias.selecao.delete(k) : varias.selecao.add(k)));
-    document.querySelectorAll(`.celula[data-semana="${semana}"][data-refeicao="${refeicao}"]`).forEach((c) => {
+    document.querySelectorAll(`.refeicao[data-semana="${semana}"][data-refeicao="${refeicao}"]`).forEach((c) => {
       const marcado = varias.selecao.has(c.dataset.chave);
       c.classList.toggle('marcado', marcado);
       c.setAttribute('aria-pressed', String(marcado));

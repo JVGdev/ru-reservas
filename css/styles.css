@@ -398,7 +398,7 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 .gv-semana { padding: 4px 12px 8px; }
 .gv-dias { list-style: none; margin: 0; padding: 0; }
 .gv-linha {
-  display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 96px 96px; align-items: center; gap: 8px;
   padding: 8px 0;
 }
 .gv-dias .gv-linha { border-top: 1px solid var(--borda); }
@@ -408,28 +408,20 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 .gv-dia strong { font-weight: 600; color: var(--verde-escuro); }
 .gv-dia span { font-size: 0.8rem; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Cabeçalho da coluna: marca ou desmarca a coluna inteira da semana. */
-.coluna {
-  min-height: 36px; padding: 0 6px; border: 0; border-radius: 999px;
-  background: var(--verde-claro); color: var(--verde-escuro);
-  font: 600 0.8rem var(--fonte-texto); cursor: pointer;
-}
-.coluna[aria-pressed="true"] { background: var(--verde-escuro); color: var(--superficie); }
-.coluna:disabled { background: none; color: var(--texto-suave); cursor: default; }
+/* Cabeçalho da coluna (botão secundário pequeno): marca ou desmarca a coluna inteira da semana.
+   Marcado usa o laranja de seleção, como os dias escolhidos no Início e no Calendário. */
+.coluna { min-height: 36px; padding: 0 8px; font-size: 0.8rem; }
+.coluna[aria-pressed="true"] { background: var(--laranja); color: var(--sobre-laranja); }
+.coluna:disabled { background: none; opacity: 1; color: var(--texto-suave); cursor: default; }
 
-.celula {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  height: 48px; padding: 0; border: 2px solid var(--borda); border-radius: 12px;
-  background: #fff; color: var(--verde-escuro); text-decoration: none; cursor: pointer;
-}
-.celula svg { width: 22px; height: 22px; stroke-width: 2.8; opacity: 0.15; }
-.celula span { font-size: 0.7rem; font-weight: 600; }
-.celula:active:not(.fechada) { transform: scale(0.96); }
-.celula.marcado { border-color: var(--verde-escuro); background: var(--verde-escuro); color: #fff; }
-.celula.marcado svg { opacity: 1; }
-.celula.reservada { border-color: transparent; background: var(--verde-claro); }
-.celula.reservada svg { width: 16px; height: 16px; opacity: 1; }
-.celula.fechada { border-color: transparent; background: var(--apagado); color: #6d705f; cursor: default; }
+/* Botão de refeição do Início, em versão compacta para a grade. */
+.refeicao.compacta { min-height: 52px; padding: 6px 10px; border-radius: 12px; }
+.refeicao.compacta .ref-nome { font-size: 0.9rem; gap: 4px; }
+.refeicao.compacta .ref-nome svg { width: 16px; height: 16px; }
+.refeicao.compacta .ref-status { font-size: 0.72rem; }
+.refeicao .i-check, .refeicao.marcado .i-mais { display: none; }
+.refeicao.marcado .i-check { display: inline-flex; }
+.refeicao.marcado { background: var(--laranja); border-color: var(--laranja); color: var(--sobre-laranja); }
 
 .barra-linha { display: flex; justify-content: center; align-items: center; gap: 12px; }
 .barra-linha .link { align-self: center; min-height: 32px; }
