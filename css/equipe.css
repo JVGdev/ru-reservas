@@ -70,6 +70,14 @@ input[type="radio"] {
   background: none; color: var(--superficie); font: 600 0.9rem var(--fonte-texto); cursor: pointer;
 }
 .eq-sair:hover { background: rgb(255 255 255 / 0.08); }
+/* Atalho da demonstração para a área de quem reserva. */
+.eq-cliente {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 40px; padding: 0 10px; border-radius: 10px;
+  background: var(--laranja-claro); color: #6b3510;
+  font: 600 0.9rem var(--fonte-texto); text-decoration: none;
+}
+.eq-cliente svg { width: 18px; height: 18px; }
 .eq-sair svg { width: 18px; height: 18px; }
 .eq-simulado {
   display: flex; align-items: center; gap: 6px;
@@ -284,7 +292,7 @@ video.camera { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radiu
 /* ---------- Telas estreitas ---------- */
 
 @media (max-width: 900px) {
-  .eq { grid-template-columns: minmax(0, 1fr); }
+  .eq { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .eq-lateral {
     position: sticky; top: 0; z-index: 10; height: auto;
     flex-direction: row; align-items: center; gap: 12px;
@@ -295,7 +303,7 @@ video.camera { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radiu
   .eq-nav a { white-space: nowrap; padding: 0 10px; gap: 8px; }
   .eq-rodape { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
   .eq-simulado span { white-space: nowrap; }
-  .eq-sair span { display: none; }
+  .eq-sair span, .eq-cliente span { display: none; }
   .eq-main { padding: 20px 16px 48px; }
   .at-grade, .ps-grade { grid-template-columns: minmax(0, 1fr); }
   .at-itens { max-height: none; }
@@ -307,9 +315,9 @@ video.camera { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radiu
   .eq-lateral { gap: 6px; padding: 8px; }
   .eq-marca { display: none; }
   .eq-nav { gap: 0; }
-  .eq-nav a { padding: 0 9px; }
+  .eq-nav a { padding: 0 7px; }
   .eq-nav a span { display: none; }
-  .eq-simulado { padding: 8px; }
+  .eq-simulado, .eq-cliente { padding: 8px; }
   .eq-simulado span { display: none; }
   .eq-sair { padding: 0 6px; }
   /* Filtros em duas colunas, com a busca na largura toda. */

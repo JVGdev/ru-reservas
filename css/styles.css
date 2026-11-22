@@ -63,7 +63,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
   gap: 20px;
 }
 
-.conteudo.entrada { padding-bottom: 32px; padding-top: 48px; }
+.conteudo.entrada { padding-bottom: 32px; padding-top: 32px; }
 
 /* ---------- Topo ---------- */
 
@@ -78,12 +78,25 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 }
 .voltar:active { background: var(--verde-claro); }
 
-.aviso-demo {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  background: var(--laranja-claro); color: #6b3510;
-  font-size: 0.85rem; padding: 6px 16px; text-decoration: none;
+/* Barra da demonstração: fica no topo de todas as telas para trocar de área na apresentação. */
+.barra-demo {
+  position: sticky; top: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 44px; padding: 4px 8px 4px 16px;
+  padding-top: calc(4px + env(safe-area-inset-top, 0px));
+  background: var(--laranja-claro); color: #6b3510; font-size: 0.85rem;
 }
-.aviso-demo svg { width: 16px; height: 16px; }
+.barra-demo svg { width: 16px; height: 16px; flex: none; }
+.bd-rotulo { font-weight: 600; }
+.bd-horario { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; text-decoration: none; }
+.bd-horario span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-equipe {
+  display: inline-flex; align-items: center; gap: 2px; flex: none;
+  min-height: 36px; padding: 0 10px 0 14px; border-radius: 999px;
+  background: var(--verde-escuro); color: #fff;
+  font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.bd-equipe:active { transform: scale(0.97); }
 
 /* ---------- Cartões, botões e links ---------- */
 
@@ -155,7 +168,6 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 .marca h1 { font-size: 2rem; }
 .marca p { color: var(--texto-suave); }
 
-.link-equipe { align-self: center; margin-top: 8px; color: var(--texto-suave); font-weight: 500; }
 
 .nota-demo {
   background: var(--laranja-claro); color: #6b3510;
@@ -460,7 +472,7 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 
 .toast {
   position: fixed; left: 50%; translate: -50% 0;
-  top: calc(env(safe-area-inset-top, 0px) + 40px);
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
   max-width: calc(100% - 32px);
   background: var(--texto); color: #fff;
   padding: 10px 16px; border-radius: 999px; font-size: 0.95rem;

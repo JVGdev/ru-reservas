@@ -124,13 +124,20 @@ function opcaoSemCarne(menu) {
 
 // ---------- Moldura ----------
 
-function avisoSimulacao() {
-  if (!t.simulando()) return '';
-  const agora = t.now();
-  const hh = String(agora.getHours()).padStart(2, '0');
-  const mm = String(agora.getMinutes()).padStart(2, '0');
-  return `<a class="aviso-demo" href="#/perfil">${ICONES.relogio}
-    Horário simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}</a>`;
+// Barra da demonstração, fixa no topo de todas as telas: horário simulado (quando houver)
+// e o atalho para a área da equipe.
+function barraDemo() {
+  let esquerda = '<span class="bd-rotulo">Protótipo</span>';
+  if (t.simulando()) {
+    const agora = t.now();
+    const hh = String(agora.getHours()).padStart(2, '0');
+    const mm = String(agora.getMinutes()).padStart(2, '0');
+    const texto = `${ICONES.relogio}<span>Simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}</span>`;
+    esquerda = store.usuarioAtual()
+      ? `<a class="bd-horario" href="#/perfil" aria-label="Horário simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}">${texto}</a>`
+      : `<span class="bd-horario">${texto}</span>`;
+  }
+  return `<div class="barra-demo">${esquerda}<a class="bd-equipe" href="equipe.html">Área da equipe ${ICONES.seta}</a></div>`;
 }
 
 function abas(atual) {
@@ -144,7 +151,7 @@ function abas(atual) {
 }
 
 function pagina(atual, conteudo) {
-  app.innerHTML = `${avisoSimulacao()}<main class="conteudo">${conteudo}</main>${abas(atual)}`;
+  app.innerHTML = `${barraDemo()}<main class="conteudo">${conteudo}</main>${abas(atual)}`;
 }
 
 function botaoVoltar() {
@@ -162,7 +169,7 @@ function telaEntrar() {
     </div>`;
 
   if (!pendente) {
-    app.innerHTML = `<main class="conteudo entrada">${marca}
+    app.innerHTML = `${barraDemo()}<main class="conteudo entrada">${marca}
       <form class="cartao formulario" data-form="email" novalidate>
         <label for="email">E-mail</label>
         <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
@@ -170,12 +177,11 @@ function telaEntrar() {
         <p class="erro" id="erro" hidden></p>
         <button class="botao primario" type="submit">Receber código</button>
       </form>
-      <a class="link link-equipe" href="equipe.html">Área da equipe do RU</a>
     </main>`;
     return;
   }
 
-  app.innerHTML = `<main class="conteudo entrada">${marca}
+  app.innerHTML = `${barraDemo()}<main class="conteudo entrada">${marca}
     <form class="cartao formulario" data-form="codigo" novalidate>
       <p class="info">Enviamos um código de 6 dígitos para <strong>${esc(pendente.email)}</strong>.</p>
       <label for="codigo">Código</label>
@@ -234,7 +240,7 @@ function telaCadastro() {
     </form>`;
 
   if (editando) pagina('perfil', conteudo);
-  else app.innerHTML = `<main class="conteudo">${conteudo}</main>`;
+  else app.innerHTML = `${barraDemo()}<main class="conteudo">${conteudo}</main>`;
 }
 
 // ---------- Peças do Início e do Calendário ----------
@@ -890,7 +896,6 @@ function telaPerfil() {
           ${t.simulando() ? '<button class="botao texto" type="button" data-acao="horario-real">Usar horário real</button>' : ''}
         </div>
       </form>
-      <a class="botao texto" href="equipe.html">Abrir a área da equipe</a>
       <button class="botao texto perigo-texto" type="button" data-acao="apagar-tudo">Apagar todos os dados</button>
     </section>
   `);

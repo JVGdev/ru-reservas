@@ -24,6 +24,7 @@ export const ICONES = {
   proximo: svg('<path d="M9 5l7 7-7 7"/>'),
   mais: svg('<path d="M12 5v14M5 12h14"/>'),
   fechar: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  celular: svg('<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>'),
   relogio: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };
 

@@ -3,7 +3,7 @@
 Site para celular onde se reserva almoço ou jantar no Restaurante Universitário da UPF, e a área da equipe do RU, para o computador do balcão e da gerência.
 
 **Abrir no celular:** https://jvgdev.github.io/ru-reservas/
-**Área da equipe:** https://jvgdev.github.io/ru-reservas/equipe (ou o link “Área da equipe do RU” na tela de login)
+**Área da equipe:** https://jvgdev.github.io/ru-reservas/equipe (ou o botão **Área da equipe** na barra laranja do topo)
 
 <img src="qr-link.svg" alt="QR Code do link do protótipo" width="160">
 
@@ -17,12 +17,12 @@ No navegador do celular, "Adicionar à tela inicial" instala o site como app.
 
 ### Área da equipe
 
-1. Abra `equipe.html` (ou o link na tela de login) e entre como **Gerência** (vê tudo) ou **Caixa** (só Atendimento e Caixa). Não há senha.
+1. Toque em **Área da equipe**, na barra laranja do topo de qualquer tela, e entre como **Gerência** (vê tudo) ou **Caixa** (só Atendimento e Caixa). Não há senha.
 2. Em **Ajustes › Demonstração**, gere os dados de exemplo: 90 pessoas e três semanas de reservas, com faltas, pagamentos e gente sem reserva.
 3. Hoje é fim de semana? Simule um horário de dia útil, por exemplo segunda às 12h30, para ver o almoço em andamento.
 4. Em **Atendimento**, digite ou leia o código de uma reserva e aperte Enter duas vezes: a primeira abre a reserva, a segunda registra a entrada com pagamento em dinheiro.
 
-A equipe vê as reservas feitas **neste navegador**: reservando em uma aba e abrindo a equipe em outra, a reserva aparece na hora.
+Para voltar, use **Ver como cliente** no menu da equipe. A equipe vê as reservas feitas **neste navegador**: reservando em uma aba e abrindo a equipe em outra, a reserva aparece na hora.
 
 Cada pessoa vê só as próprias reservas: os dados ficam no navegador de quem está usando.
 Em **Perfil › Demonstração** dá para simular outro horário (por exemplo, 11h para mostrar que o almoço de hoje fechou) e apagar tudo para recomeçar.

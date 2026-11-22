@@ -57,7 +57,7 @@ function telaEntrar() {
       </button>`).join('')}
     </div>
     <p class="nota-demo"><strong>Protótipo:</strong> sem senha. A equipe vê as reservas feitas neste navegador.</p>
-    <a class="link" href="./">Ir para a área de quem reserva</a>
+    <a class="botao secundario" href="./">${ICONES.celular} Ver como cliente</a>
   </main>`;
 }
 
@@ -85,6 +85,7 @@ function moldura(papel, secao, conteudo) {
       </nav>
       <div class="eq-rodape">
         ${avisoSimulacao(papel)}
+        <a class="eq-cliente" href="./" aria-label="Ver como cliente">${ICONES.celular}<span>Ver como cliente</span></a>
         <span class="eq-quem">${PAPEIS[papel].nome}</span>
         <button type="button" class="eq-sair" data-acao="sair">${ICONES.sair}<span>Sair</span></button>
       </div>
