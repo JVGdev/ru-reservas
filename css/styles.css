@@ -395,36 +395,44 @@ input:focus, select:focus { outline: none; border-color: var(--verde); box-shado
 
 .secao-links { display: flex; gap: 16px; }
 .botao.pequeno { min-height: 40px; padding: 0 14px; font-size: 0.9rem; }
-.atalhos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.atalhos .botao.texto { margin-left: auto; padding: 0 4px; }
-
-.lista-dias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.linha-dia {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 12px; background: var(--superficie);
-  border: 1px solid var(--borda); border-radius: var(--raio);
+.gv-semana { padding: 4px 12px 8px; }
+.gv-dias { list-style: none; margin: 0; padding: 0; }
+.gv-linha {
+  display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; align-items: center; gap: 8px;
+  padding: 8px 0;
 }
-.ld-info { display: flex; flex-direction: column; }
-.ld-info strong { font-family: var(--fonte-titulo); font-weight: 400; color: var(--verde-escuro); font-size: 1.05rem; }
-.ld-refeicoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gv-dias .gv-linha { border-top: 1px solid var(--borda); }
+.gv-cabeca { padding: 8px 0 6px; }
+.gv-cabeca h2 { font-size: 1rem; }
+.gv-dia { display: flex; flex-direction: column; min-width: 0; }
+.gv-dia strong { font-weight: 600; color: var(--verde-escuro); }
+.gv-dia span { font-size: 0.8rem; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.toggle {
-  display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 6px;
-  min-height: 52px; padding: 6px 10px;
-  border: 2px solid var(--borda); border-radius: 12px;
-  background: #fff; color: var(--verde-escuro);
-  font: 600 0.95rem var(--fonte-texto); text-align: left; text-decoration: none; cursor: pointer;
+/* Cabeçalho da coluna: marca ou desmarca a coluna inteira da semana. */
+.coluna {
+  min-height: 36px; padding: 0 6px; border: 0; border-radius: 999px;
+  background: var(--verde-claro); color: var(--verde-escuro);
+  font: 600 0.8rem var(--fonte-texto); cursor: pointer;
 }
-.toggle > span { grid-column: 2; font-weight: 400; font-size: 0.75rem; color: var(--texto-suave); }
-.toggle svg { width: 18px; height: 18px; stroke-width: 2.6; grid-row: span 2; opacity: 0.2; }
-.toggle.marcado { border-color: var(--verde-escuro); background: var(--verde-claro); }
-.toggle.marcado svg { opacity: 1; }
-.toggle.reservada { border-color: var(--verde-escuro); background: var(--verde-escuro); color: var(--superficie); }
-.toggle.reservada svg { opacity: 1; }
-.toggle.reservada > span { color: var(--verde-texto-claro); }
-.toggle.fechada { grid-template-columns: 1fr; border-color: transparent; background: var(--apagado); color: #6d705f; cursor: default; }
-.toggle.fechada > span { grid-column: 1; }
+.coluna[aria-pressed="true"] { background: var(--verde-escuro); color: var(--superficie); }
+.coluna:disabled { background: none; color: var(--texto-suave); cursor: default; }
 
+.celula {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  height: 48px; padding: 0; border: 2px solid var(--borda); border-radius: 12px;
+  background: #fff; color: var(--verde-escuro); text-decoration: none; cursor: pointer;
+}
+.celula svg { width: 22px; height: 22px; stroke-width: 2.8; opacity: 0.15; }
+.celula span { font-size: 0.7rem; font-weight: 600; }
+.celula:active:not(.fechada) { transform: scale(0.96); }
+.celula.marcado { border-color: var(--verde-escuro); background: var(--verde-escuro); color: #fff; }
+.celula.marcado svg { opacity: 1; }
+.celula.reservada { border-color: transparent; background: var(--verde-claro); }
+.celula.reservada svg { width: 16px; height: 16px; opacity: 1; }
+.celula.fechada { border-color: transparent; background: var(--apagado); color: #6d705f; cursor: default; }
+
+.barra-linha { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.barra-linha .link { align-self: center; min-height: 32px; }
 .barra-confirmar {
   position: sticky; bottom: calc(var(--altura-abas) + var(--base) + 8px);
   display: flex; flex-direction: column; gap: 6px;
