@@ -49,13 +49,17 @@ Automatizar o caminho da reserva até o pagamento. A reserva serve para o RU pla
 
 ## Situação atual
 
-O protótipo publicado ([README](README.md)) cobre parte do fluxo de quem reserva: login por código, reserva de um dia por vez, cardápio, cancelamento até o horário de corte e QR Code da reserva. Os dados ficam no navegador, sem servidor.
+O protótipo publicado ([README](README.md)) tem as duas áreas, com os dados no navegador e sem servidor:
+
+- **Quem reserva:** login por código, reserva de um dia por vez, cardápio, cancelamento até o horário de corte, QR Code da reserva e faltas no Perfil.
+- **Equipe:** atendimento no balcão (QR Code, busca, entrada com pagamento em dinheiro ou PIX, sem reserva), painel do dia, reservas com filtros e planilha, pessoas com faltas e abono, caixa, cardápio com publicação e ajustes.
 
 Ainda falta:
 
 - reserva de vários dias de uma vez;
-- pagamento (dinheiro, antecipado, vales);
-- toda a área da equipe.
+- pagamento antecipado (PIX online);
+- caixa físico e estoque, que dependem de resposta do RU;
+- servidor, para as reservas dos celulares chegarem ao computador da equipe.
 
 ## Em aberto
 

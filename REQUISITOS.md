@@ -85,60 +85,61 @@ Prioridade: **Essencial** (pedido direto do cliente), **Desejável** (bem-vindo,
 | RF04 | Ver o cardápio da semana, com os símbolos de cada item (vegano, glúten, lactose etc.). | Essencial | Pronto (cardápios de exemplo) |
 | RF05 | Escolher os dias num calendário. | Essencial | Pronto |
 | RF06 | Reservar almoço, jantar ou ambos, com marmita e suco opcionais. | Essencial | Parcial (almoço e jantar são reservas separadas) |
-| RF07 | Fazer várias reservas de uma vez, como a semana inteira. | Essencial | Falta |
+| RF07 | Fazer várias reservas de uma vez, como a semana inteira. | Essencial | Pronto |
 | RF08 | Ver o valor total, conforme o perfil, antes de confirmar. | Essencial | Pronto |
 | RF09 | Ver as próprias reservas, ativas e anteriores. | Essencial | Pronto |
-| RF10 | Cancelar uma reserva. Depois do corte, o cancelamento conta como falta (RN05). | Essencial | Parcial (só permite até o corte) |
+| RF10 | Cancelar uma reserva. Depois do corte, o cancelamento conta como falta (RN05). | Essencial | Pronto |
 | RF11 | Gerar um QR Code único para cada reserva confirmada. | Essencial | Pronto |
-| RF12 | Mostrar ao cliente quantas faltas ele tem e se está com o desconto bloqueado. | Essencial | Falta |
+| RF12 | Mostrar ao cliente quantas faltas ele tem e se está com o desconto bloqueado. | Essencial | Pronto (no Perfil) |
 
 ### 3.3 Pagamento
 
 | ID | Requisito | Prioridade | Protótipo |
 | --- | --- | --- | --- |
-| RF13 | Registrar o pagamento em dinheiro no balcão, na mesma tela do check-in. | Essencial | Falta |
+| RF13 | Registrar o pagamento em dinheiro no balcão, na mesma tela do check-in. | Essencial | Pronto |
 | RF14 | Pagar antecipadamente por PIX online, no momento da reserva. | Desejável | Falta |
 
 ### 3.4 Atendimento
 
 | ID | Requisito | Prioridade | Protótipo |
 | --- | --- | --- | --- |
-| RF15 | Listar as reservas do dia por refeição, com a marcação de quem veio. | Essencial | Falta |
-| RF16 | Fazer check-in no computador do caixa, lendo o QR Code da reserva. | Essencial | Falta |
-| RF17 | Fazer check-in por busca de nome ou matrícula, sem QR Code. | Essencial | Falta |
-| RF18 | Registrar quem comeu sem reserva. | Essencial | Falta |
-| RF19 | Registrar falta quando a refeição termina sem check-in. | Essencial | Falta |
-| RF20 | Abonar uma falta. | Desejável | Falta |
+| RF15 | Listar as reservas do dia por refeição, com a marcação de quem veio. | Essencial | Pronto |
+| RF16 | Fazer check-in pelo celular ou no computador do caixa, lendo o QR Code da reserva. | Essencial | Pronto (leitor USB, câmera no Chrome do Android e do Mac, ou digitação) |
+| RF17 | Fazer check-in por busca de nome ou matrícula, sem QR Code. | Essencial | Pronto |
+| RF18 | Registrar quem comeu sem reserva. | Essencial | Pronto |
+| RF19 | Registrar falta quando a refeição termina sem check-in. | Essencial | Pronto |
+| RF20 | Abonar uma falta. | Desejável | Pronto |
 
 ### 3.5 Gestão
 
 | ID | Requisito | Prioridade | Protótipo |
 | --- | --- | --- | --- |
-| RF21 | Criar, editar e publicar o cardápio da semana. | Essencial | Falta |
-| RF22 | Filtrar reservas por data, refeição e situação. | Essencial | Falta |
-| RF23 | Ver num painel único as reservas, as presenças e as entradas de dinheiro. | Essencial | Falta |
-| RF24 | Mostrar os totais de cada refeição: reservas por perfil, sem reserva, marmitas, sucos, pagos e pendentes. | Essencial | Falta |
-| RF25 | Consultar o histórico de dias, pessoas e reservas. | Essencial | Falta |
-| RF26 | Registrar as entradas de dinheiro por forma de pagamento, no lugar das anotações à mão do caixa. | Essencial | Falta |
+| RF21 | Criar, editar e publicar o cardápio da semana. | Essencial | Pronto |
+| RF22 | Filtrar reservas por data, refeição e situação. | Essencial | Pronto |
+| RF23 | Ver num painel único as reservas, as presenças e as entradas de dinheiro. | Essencial | Pronto |
+| RF24 | Mostrar os totais de cada refeição: reservas por perfil, sem reserva, marmitas, sucos, pagos e pendentes. | Essencial | Pronto |
+| RF25 | Consultar o histórico de dias, pessoas e reservas. | Essencial | Pronto |
+| RF26 | Registrar as entradas de dinheiro por forma de pagamento, no lugar das anotações à mão do caixa. | Essencial | Pronto |
 | RF27 | Controlar o caixa físico. | A confirmar | Falta |
 | RF28 | Controlar o estoque: quantidade, data e valor de cada item. | A confirmar | Falta |
-| RF29 | Gerar o relatório de reservas para o Consumer. | Essencial | Falta |
-| RF30 | Configurar valores, horários de corte e dias de funcionamento. | Essencial | Falta |
-| RF31 | Aplicar a penalidade da RN05 automaticamente. | Essencial | Falta |
+| RF29 | Gerar o relatório de reservas para o Consumer. | Essencial | Parcial (planilha CSV; formato do Consumer a definir) |
+| RF30 | Configurar valores, horários de corte e dias de funcionamento. | Essencial | Pronto |
+| RF31 | Aplicar a penalidade da RN05 automaticamente. | Essencial | Pronto (regra "1 para 1") |
 
 ## 4. Regras de negócio
 
 | ID | Regra |
 | --- | --- |
-| RN01 | Preço da refeição: R$ 10,00 para estudantes e R$ 20,00 para os demais. Marmita custa R$ 2,50 a mais, e suco R$ 3,00 a mais. |
+| RN01 | Preço da refeição: R$ 10,00 para estudantes, R$ 15,00 para funcionários e R$ 20,00 para os demais. Marmita custa R$ 2,50 a mais, e suco R$ 3,00 a mais. |
 | RN02 | A categoria de preço vem do perfil. Não é preciso comprovar vínculo de estudante para reservar: a diferença aparece no pagamento. |
 | RN03 | Quem não é estudante também pode reservar. |
 | RN04 | Corte: almoço até 10h e jantar até 16h do próprio dia. |
-| RN05 | Conta como falta não vir sem cancelar, ou cancelar depois do corte. A partir da terceira falta, o cliente perde o desconto de estudante. |
+| RN05 | Conta como falta não vir sem cancelar, ou cancelar depois do corte. A partir da terceira falta, o cliente perde o desconto de estudante na sua próxima reserva. |
 | RN06 | Cancelar até o corte não conta como falta. |
 | RN07 | Cada QR Code vale para um único check-in. |
 | RN08 | O pagamento em dinheiro no balcão é sempre aceito. |
 | RN09 | Quem não reservou também é atendido. |
+| RN10 | Fazer reembolso caso o cliente pague antecipado e cancele a reserva. |
 
 ## 5. Requisitos não funcionais
 

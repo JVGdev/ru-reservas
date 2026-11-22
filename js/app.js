@@ -1,6 +1,10 @@
-import { PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, PENALIDADE, cardapioDo, semanasDoCalendario } from './data.js';
+import {
+  PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, FORMAS_PAGAMENTO,
+  cardapioDo, semanasDoCalendario, semanaDe,
+} from './data.js';
 import * as store from './store.js';
 import * as t from './time.js';
+import { esc, reais, toast } from './ui.js';
 
 const app = document.getElementById('app');
 const ORDEM_REFEICOES = Object.keys(REFEICOES);
@@ -11,16 +15,12 @@ const escolha = { dia: null, cardapioAberto: false };
 // Folha de reserva rápida aberta.
 const rapida = { dia: null, refeicao: null, extras: new Set() };
 // Refeições marcadas na tela "Vários dias" ("2026-11-23|almoco") e adicionais escolhidos.
-const varias = { selecao: new Set(), extras: new Set() };
+// `abertas`: semanas expandidas na tela (null = só a primeira, na primeira visita).
+const varias = { selecao: new Set(), extras: new Set(), abertas: null };
 // E-mail digitado na tela de login, mantido se a validação falhar.
 let emailDigitado = '';
 
 // ---------- Utilidades ----------
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-const reais = (centavos) => (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const minuscula = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
@@ -35,15 +35,6 @@ const ICONES = {
   fechar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   relogio: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
-
-let toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('visivel');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('visivel'), 2800);
-}
 
 function ir(caminho, substituir = false) {
   if (location.hash === `#${caminho}`) return rota();
@@ -134,13 +125,20 @@ function opcaoSemCarne(menu) {
 
 // ---------- Moldura ----------
 
-function avisoSimulacao() {
-  if (!t.simulando()) return '';
-  const agora = t.now();
-  const hh = String(agora.getHours()).padStart(2, '0');
-  const mm = String(agora.getMinutes()).padStart(2, '0');
-  return `<a class="aviso-demo" href="#/perfil">${ICONES.relogio}
-    Horário simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}</a>`;
+// Barra da demonstração, fixa no topo de todas as telas: horário simulado (quando houver)
+// e o atalho para a área da equipe.
+function barraDemo() {
+  let esquerda = '<span class="bd-rotulo">Protótipo</span>';
+  if (t.simulando()) {
+    const agora = t.now();
+    const hh = String(agora.getHours()).padStart(2, '0');
+    const mm = String(agora.getMinutes()).padStart(2, '0');
+    const texto = `${ICONES.relogio}<span>Simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}</span>`;
+    esquerda = store.usuarioAtual()
+      ? `<a class="bd-horario" href="#/perfil" aria-label="Horário simulado: ${esc(t.dataCurta(t.isoDate(agora)))}, ${hh}:${mm}">${texto}</a>`
+      : `<span class="bd-horario">${texto}</span>`;
+  }
+  return `<div class="barra-demo">${esquerda}<a class="bd-equipe" href="equipe.html">Área da equipe ${ICONES.seta}</a></div>`;
 }
 
 function abas(atual) {
@@ -154,7 +152,7 @@ function abas(atual) {
 }
 
 function pagina(atual, conteudo) {
-  app.innerHTML = `${avisoSimulacao()}<main class="conteudo">${conteudo}</main>${abas(atual)}`;
+  app.innerHTML = `${barraDemo()}<main class="conteudo">${conteudo}</main>${abas(atual)}`;
 }
 
 function botaoVoltar() {
@@ -172,7 +170,7 @@ function telaEntrar() {
     </div>`;
 
   if (!pendente) {
-    app.innerHTML = `<main class="conteudo entrada">${marca}
+    app.innerHTML = `${barraDemo()}<main class="conteudo entrada">${marca}
       <form class="cartao formulario" data-form="email" novalidate>
         <label for="email">E-mail</label>
         <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
@@ -184,7 +182,7 @@ function telaEntrar() {
     return;
   }
 
-  app.innerHTML = `<main class="conteudo entrada">${marca}
+  app.innerHTML = `${barraDemo()}<main class="conteudo entrada">${marca}
     <form class="cartao formulario" data-form="codigo" novalidate>
       <p class="info">Enviamos um código de 6 dígitos para <strong>${esc(pendente.email)}</strong>.</p>
       <label for="codigo">Código</label>
@@ -243,7 +241,7 @@ function telaCadastro() {
     </form>`;
 
   if (editando) pagina('perfil', conteudo);
-  else app.innerHTML = `<main class="conteudo">${conteudo}</main>`;
+  else app.innerHTML = `${barraDemo()}<main class="conteudo">${conteudo}</main>`;
 }
 
 // ---------- Peças do Início e do Calendário ----------
@@ -307,11 +305,9 @@ function itemCardapio(item) {
 function cardapioCompleto(menu) {
   return `<div class="cardapio">
     <h3>Prato do dia</h3>
-    <ul>${[ACOMPANHAMENTO, ...menu.pratos].map(itemCardapio).join('')}</ul>
-    <h3>Saladas</h3>
-    <ul>${menu.saladas.map(itemCardapio).join('')}</ul>
-    <h3>Suco</h3>
-    <ul>${itemCardapio(menu.suco)}</ul>
+    <ul>${[ACOMPANHAMENTO, ...menu.pratos].filter(Boolean).map(itemCardapio).join('')}</ul>
+    ${menu.saladas.length ? `<h3>Saladas</h3><ul>${menu.saladas.map(itemCardapio).join('')}</ul>` : ''}
+    ${menu.suco ? `<h3>Suco</h3><ul>${itemCardapio(menu.suco)}</ul>` : ''}
   </div>`;
 }
 
@@ -443,8 +439,11 @@ function limparSelecao(agora) {
 }
 
 function totalVarias(agora) {
-  const unitario = store.precoDe(store.usuarioAtual(), [...varias.extras], agora);
-  return { n: varias.selecao.size, total: unitario * varias.selecao.size };
+  const n = varias.selecao.size;
+  const extras = [...varias.extras].reduce((soma, e) => soma + ADICIONAIS[e].preco, 0);
+  const total = store.categoriasDasProximas(store.usuarioAtual(), n, agora)
+    .reduce((soma, c) => soma + CATEGORIAS[c].preco + extras, 0);
+  return { n, total };
 }
 
 function textoBotaoVarias(agora) {
@@ -467,13 +466,26 @@ function toggleRefeicao(iso, r, agora) {
     aria-pressed="${marcado}" aria-label="${esc(`${nome}, ${t.dataLonga(iso)}`)}">${ICONES.check}${nome}<span>${textoPrazo(iso, r, agora)}</span></button>`;
 }
 
+function nomeSemana(semana, agora) {
+  const atual = semanaDe(t.isoDate(agora));
+  if (semana === atual) return 'Esta semana';
+  if (semana === t.isoDate(t.addDays(t.parseISO(atual), 7))) return 'Próxima semana';
+  return `Semana de ${semana.slice(8)}/${semana.slice(5, 7)}`;
+}
+
+// "2 marcadas" para o resumo da semana (vazio quando nada está marcado).
+function textoMarcadas(semana) {
+  const n = [...varias.selecao].filter((k) => semanaDe(k.split('|')[0]) === semana).length;
+  return n ? `${n} ${n === 1 ? 'marcada' : 'marcadas'}` : '';
+}
+
 function telaVarias() {
   const agora = t.now();
   const usuario = store.usuarioAtual();
   limparSelecao(agora);
   const dias = diasDisponiveis(agora);
 
-  const linhas = dias.map((iso) => {
+  const linha = (iso) => {
     const menu = cardapioDo(iso, agora);
     return `<li class="linha-dia">
       <div class="ld-info">
@@ -482,7 +494,26 @@ function telaVarias() {
       </div>
       <div class="ld-refeicoes">${ORDEM_REFEICOES.map((r) => toggleRefeicao(iso, r, agora)).join('')}</div>
     </li>`;
-  }).join('');
+  };
+
+  // Uma seção recolhível por semana. Começa com a primeira aberta.
+  const semanas = new Map();
+  dias.forEach((iso) => {
+    const s = semanaDe(iso);
+    if (!semanas.has(s)) semanas.set(s, []);
+    semanas.get(s).push(iso);
+  });
+  if (!varias.abertas) varias.abertas = new Set([...semanas.keys()].slice(0, 1));
+  const ddmm = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
+  const secoes = [...semanas].map(([semana, ds]) => `
+    <details class="semana-varias" data-semana="${semana}" ${varias.abertas.has(semana) ? 'open' : ''}>
+      <summary>
+        <span class="sv-titulo"><strong>${esc(nomeSemana(semana, agora))}</strong><span class="dica">${ddmm(ds[0])} a ${ddmm(ds.at(-1))}</span></span>
+        <span class="sv-conta" data-conta="${semana}">${textoMarcadas(semana)}</span>
+        <span class="sv-seta" aria-hidden="true">${ICONES.seta}</span>
+      </summary>
+      <ul class="lista-dias">${ds.map(linha).join('')}</ul>
+    </details>`).join('');
 
   const extras = Object.entries(ADICIONAIS).map(([id, a]) => `
     <label class="opcao">
@@ -500,7 +531,7 @@ function telaVarias() {
         <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="jantar">Jantares</button>
         <button type="button" class="botao texto pequeno" data-acao="limpar-varias">Limpar</button>
       </div>
-      <ul class="lista-dias">${linhas}</ul>
+      <div class="semanas-varias">${secoes}</div>
       <div class="opcoes">${extras}</div>
       <div class="barra-confirmar">
         <button type="button" class="botao primario grande" data-acao="confirmar-varias" id="confirmar-varias"
@@ -516,6 +547,7 @@ function atualizarBarraVarias() {
   if (!botao) return;
   botao.textContent = textoBotaoVarias(t.now());
   botao.disabled = varias.selecao.size === 0;
+  document.querySelectorAll('[data-conta]').forEach((el) => { el.textContent = textoMarcadas(el.dataset.conta); });
 }
 
 function confirmarVarias() {
@@ -563,7 +595,7 @@ function totalRapida() {
 // Nome da categoria que vale agora, com o aviso de desconto bloqueado quando for o caso.
 function textoCategoria(usuario, agora) {
   const s = store.situacaoFaltas(usuario, agora);
-  if (s.aplica && s.bloqueadoAte) return `Desconto bloqueado até ${t.dataCurta(t.isoDate(new Date(s.bloqueadoAte)))}`;
+  if (s.aplica && s.pendentes) return s.pendentes === 1 ? 'Sem desconto nesta reserva (falta)' : `Sem desconto nas próximas ${s.pendentes} reservas (faltas)`;
   return CATEGORIAS[store.categoriaAplicada(usuario, agora)].nome;
 }
 
@@ -600,7 +632,12 @@ function abrirReserva(dia, refeicao) {
     <div class="resumo-menu">
       <div class="resumo-linha"><strong>${esc(principal.nome)}</strong><span class="tags">${tags(principal)}</span></div>
       ${opcao ? `<div class="resumo-linha"><span>${esc(opcao.nome)}</span><span class="tags">${tags(opcao)}</span></div>` : ''}
-      <p class="dica">${guarnicao ? `${esc(guarnicao.nome)} · ` : ''}arroz e feijão · ${menu.saladas.length} saladas · suco de ${esc(minuscula(menu.suco.nome))}</p>
+      <p class="dica">${[
+        guarnicao && esc(guarnicao.nome),
+        'arroz e feijão',
+        menu.saladas.length && `${menu.saladas.length} ${menu.saladas.length === 1 ? 'salada' : 'saladas'}`,
+        menu.suco && `suco de ${esc(minuscula(menu.suco.nome))}`,
+      ].filter(Boolean).join(' · ')}</p>
     </div>
     <div class="opcoes">${extras}</div>
     <div class="folha-rodape">
@@ -630,11 +667,10 @@ function avisoCancelamento(r, agora) {
   const corte = t.hora(REFEICOES[r.refeicao].corte);
   if (!passouCorte(r, agora)) return `<p class="info">Sem penalidade: o prazo vai até ${corte}${t.relativo(r.data, agora) === 'hoje' ? '' : ' do dia'}.</p>`;
   const s = store.situacaoFaltas(store.usuarioAtual(), agora);
-  const n = s.contando + 1;
-  const bloqueia = s.aplica && !s.bloqueadoAte && n >= s.limite;
-  return `<p class="alerta">Já passou das ${corte}. Cancelar agora conta como falta
-    (${n}ª de ${s.limite} em ${PENALIDADE.janelaDias} dias)${bloqueia
-      ? `<strong> e bloqueia o desconto de estudante por ${PENALIDADE.diasBloqueio} dias</strong>` : ''}.</p>`;
+  const n = s.total + 1;
+  const penaliza = s.aplica && n >= s.limite;
+  return `<p class="alerta">Já passou das ${corte}. Cancelar agora conta como falta (${n}ª)${penaliza
+    ? '<strong> e a sua próxima reserva fica sem o desconto de estudante</strong>' : ''}.</p>`;
 }
 
 function pedirCancelamento(id) {
@@ -720,7 +756,7 @@ function telaBilhete(id) {
   const falta = store.faltaDe(r, agora);
 
   let estado = '';
-  if (r.status === 'utilizada') estado = `<p class="selo usada">${ICONES.check}Check-in às ${dataHora(r.checkinEm).split(', ')[1]}</p>`;
+  if (r.status === 'utilizada') estado = `<p class="selo usada">${ICONES.check}Check-in às ${dataHora(r.checkinEm).split(', ').at(-1)}</p>`;
   else if (falta === 'apos-corte') estado = '<p class="selo falta">Cancelada depois do corte: contou como falta</p>';
   else if (falta === 'nao-veio') estado = '<p class="selo falta">Falta: a refeição terminou sem check-in</p>';
   else if (!ativa) estado = '<p class="selo cancelada">Reserva cancelada</p>';
@@ -747,7 +783,7 @@ function telaBilhete(id) {
         <div><dt>Perfil</dt><dd>${esc(store.perfilDe(usuario).nome)}</dd></div>
         <div><dt>Adicionais</dt><dd>${textoExtras(r.extras)}</dd></div>
         <div><dt>Valor</dt><dd><strong>${reais(r.valor)}</strong> · ${CATEGORIAS[r.categoria].nome}</dd></div>
-        <div><dt>Pagamento</dt><dd>No balcão</dd></div>
+        <div><dt>Pagamento</dt><dd>${r.pagamento ? `Pago · ${FORMAS_PAGAMENTO[r.pagamento.forma]}` : 'No balcão<br><span class="dica">dinheiro, PIX ou cartão</span>'}</dd></div>
       </dl>
     </section>
     ${cancelavel ? `
@@ -766,26 +802,28 @@ function telaBilhete(id) {
 
 // ---------- Perfil ----------
 
-// Cartão de faltas (RF12): quantas contam agora, se o desconto está bloqueado e a lista.
+// Cartão de faltas (RF12): quantas faltas a pessoa tem e se a próxima reserva fica sem desconto.
 function cartaoFaltas(u, agora) {
   const s = store.situacaoFaltas(u, agora);
   const pontos = Array.from({ length: s.limite }, (_, i) =>
-    `<span class="ponto${i < s.contando ? ' cheio' : ''}"></span>`).join('');
+    `<span class="ponto${i < s.total ? ' cheio' : ''}"></span>`).join('');
 
   let situacao;
-  if (!s.aplica) situacao = 'Seu perfil já paga o preço cheio, então as faltas não mudam o valor. Elas ficam registradas para o RU.';
-  else if (s.bloqueadoAte) situacao = `<strong>Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))}.</strong> Reservas feitas até lá custam ${reais(CATEGORIAS.demais.preco)}.`;
-  else if (s.contando === s.limite - 1) situacao = `<strong>Mais uma falta bloqueia o desconto</strong> por ${PENALIDADE.diasBloqueio} dias.`;
-  else situacao = `Com ${s.limite} faltas em ${PENALIDADE.janelaDias} dias, o desconto de estudante fica bloqueado por ${PENALIDADE.diasBloqueio} dias.`;
+  if (!s.aplica) situacao = 'Seu perfil não tem desconto de estudante, então as faltas não mudam o valor. Elas ficam registradas para o RU.';
+  else if (s.pendentes) {
+    situacao = `<strong>${s.pendentes === 1 ? 'Sua próxima reserva fica' : `Suas próximas ${s.pendentes} reservas ficam`} sem o desconto de estudante</strong> (${reais(CATEGORIAS.demais.preco)}).`;
+  } else if (s.total >= s.limite) situacao = 'Cada nova falta tira o desconto de estudante da reserva seguinte.';
+  else if (s.total === s.limite - 1) situacao = '<strong>Na próxima falta</strong>, a reserva seguinte fica sem o desconto de estudante.';
+  else situacao = `A partir da ${s.limite}ª falta, cada falta tira o desconto de estudante da reserva seguinte.`;
 
   const lista = s.faltas.slice(0, 5).map((f) => `<li>
       <span><strong>${esc(t.dataCurta(f.reserva.data))}</strong> · ${REFEICOES[f.reserva.refeicao].nome}</span>
       <span class="dica">${MOTIVO_FALTA[f.tipo]}</span></li>`).join('');
 
-  return `<section class="cartao faltas${s.bloqueadoAte && s.aplica ? ' bloqueado' : ''}" aria-labelledby="faltas-titulo">
+  return `<section class="cartao faltas${s.pendentes && s.aplica ? ' bloqueado' : ''}" aria-labelledby="faltas-titulo">
     <div class="faltas-topo">
       <h2 id="faltas-titulo">Faltas</h2>
-      <span class="faltas-conta" aria-label="${s.contando} de ${s.limite} faltas">${pontos}<span>${s.contando} de ${s.limite}</span></span>
+      <span class="faltas-conta" aria-label="${s.total} ${s.total === 1 ? 'falta' : 'faltas'}">${pontos}<span>${s.total}</span></span>
     </div>
     <p class="dica">${situacao}</p>
     <p class="dica">Conta como falta não vir sem cancelar, ou cancelar depois do corte.</p>
@@ -793,15 +831,15 @@ function cartaoFaltas(u, agora) {
   </section>`;
 }
 
-// Aviso no Início quando o desconto está bloqueado ou falta uma falta para bloquear.
+// Aviso no Início quando a próxima reserva fica sem desconto ou falta uma falta para isso.
 function avisoFaltas(u, agora) {
   const s = store.situacaoFaltas(u, agora);
   if (!s.aplica) return '';
-  if (s.bloqueadoAte) {
-    return `<a class="aviso-faltas bloqueado" href="#/perfil">Desconto de estudante bloqueado até ${esc(dataHora(s.bloqueadoAte))} por faltas.</a>`;
+  if (s.pendentes) {
+    return `<a class="aviso-faltas bloqueado" href="#/perfil">Por causa das faltas, ${s.pendentes === 1 ? 'a próxima reserva fica' : `as próximas ${s.pendentes} reservas ficam`} sem o desconto de estudante.</a>`;
   }
-  if (s.contando === s.limite - 1) {
-    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.contando} faltas. Mais uma bloqueia o desconto por ${PENALIDADE.diasBloqueio} dias.</a>`;
+  if (s.total === s.limite - 1) {
+    return `<a class="aviso-faltas" href="#/perfil">Você tem ${s.total} faltas. Com mais uma, a reserva seguinte fica sem o desconto de estudante.</a>`;
   }
   return '';
 }
@@ -901,6 +939,15 @@ document.addEventListener('click', (ev) => {
   const acao = acoes[el.dataset.acao];
   if (acao) { ev.preventDefault(); acao(el); }
 });
+
+// Lembra quais semanas estão abertas, para a tela redesenhar do mesmo jeito.
+// O evento "toggle" não sobe pela árvore, então é ouvido na captura.
+document.addEventListener('toggle', (ev) => {
+  const el = ev.target;
+  if (!el.matches?.('details.semana-varias') || !varias.abertas) return;
+  if (el.open) varias.abertas.add(el.dataset.semana);
+  else varias.abertas.delete(el.dataset.semana);
+}, true);
 
 document.addEventListener('change', (ev) => {
   const el = ev.target;

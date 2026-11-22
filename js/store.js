@@ -1,30 +1,16 @@
 // Dados do protótipo, guardados no navegador (localStorage).
 // Num sistema real, tudo isto fica no servidor.
 
-import { CATEGORIAS, ADICIONAIS, PERFIS, REFEICOES, PENALIDADE } from './data.js';
+import { CATEGORIAS, ADICIONAIS, PERFIS, REFEICOES, PENALIDADE, carregarAjustes } from './data.js';
+import { ler, gravar, apagarDados } from './armazem.js';
 import { at } from './time.js';
-
-const memoria = {};
-
-function ler(key, padrao) {
-  try {
-    const v = localStorage.getItem(key);
-    return (v == null ? null : JSON.parse(v)) ?? padrao;
-  } catch {
-    return memoria[key] ?? padrao;
-  }
-}
-
-function gravar(key, valor) {
-  memoria[key] = valor;
-  try { localStorage.setItem(key, JSON.stringify(valor)); } catch { /* fica só na memória */ }
-}
 
 const K = {
   usuarios: 'ru.usuarios',
   sessao: 'ru.sessao',
   codigo: 'ru.codigo',
   reservas: 'ru.reservas',
+  equipe: 'ru.equipe',
 };
 
 const DEZ_MIN = 10 * 60 * 1000;
@@ -97,83 +83,94 @@ export function categoriaDe(usuario) {
 
 // ---------- Faltas e penalidade (RN05) ----------
 
-const DIA = 24 * 60 * 60 * 1000;
-
 // Reservas criadas antes desta versão do protótipo não tinham check-in; elas nunca contam como falta.
-const VERSAO = 2;
+export const VERSAO = 2;
 
-// null, 'nao-veio' (terminou a refeição sem check-in) ou 'apos-corte' (cancelou depois do corte).
-export function faltaDe(r, agora) {
-  if (r.v !== VERSAO) return null;
+// Falta sem considerar abono: null, 'nao-veio' (terminou a refeição sem check-in)
+// ou 'apos-corte' (cancelou depois do corte).
+function faltaBruta(r, agora) {
+  if (r.v !== VERSAO || r.semReserva) return null;
   if (r.status === 'cancelada') return r.falta === 'apos-corte' ? 'apos-corte' : null;
   if (r.status === 'ativa' && agora >= at(r.data, REFEICOES[r.refeicao].fim)) return 'nao-veio';
   return null;
+}
+
+// A falta que conta: falta abonada pela equipe não conta.
+export function faltaDe(r, agora) {
+  return r.abonada ? null : faltaBruta(r, agora);
 }
 
 function momentoDaFalta(r, tipo) {
   return tipo === 'apos-corte' ? r.canceladaEm : at(r.data, REFEICOES[r.refeicao].fim).getTime();
 }
 
-// Faltas do usuário e situação do desconto no instante `agora`.
-// A cada falta, contam as anteriores dentro da janela e depois do último bloqueio;
-// ao chegar no limite, o desconto fica bloqueado e a contagem recomeça.
+// Reservas (e registros sem reserva) que pagaram sem desconto por causa da penalidade.
+// Se a pessoa cancela dentro do prazo, a penalidade volta para a próxima reserva.
+function penalizadas(email) {
+  return ler(K.reservas, []).filter((r) => r.email === email && r.penalizada
+    && !(r.status === 'cancelada' && r.falta !== 'apos-corte')).length;
+}
+
+// Faltas da pessoa e quantas das próximas reservas ficam sem desconto.
+// Regra "1 para 1": a partir da falta número `PENALIDADE.faltas`, cada falta tira o desconto
+// de estudante da reserva seguinte, e só dela. A contagem não zera (A CONFIRMAR em data.js).
 export function situacaoFaltas(usuario, agora) {
   const ms = agora.getTime();
-  const faltas = reservasDoUsuario()
+  const faltas = ler(K.reservas, [])
+    .filter((r) => r.email === usuario.email)
     .map((r) => ({ reserva: r, tipo: faltaDe(r, agora) }))
     .filter((f) => f.tipo)
     .map((f) => ({ ...f, em: momentoDaFalta(f.reserva, f.tipo) }))
     .filter((f) => f.em <= ms)
-    .sort((a, b) => a.em - b.em);
+    .sort((a, b) => b.em - a.em);
 
-  const janela = PENALIDADE.janelaDias * DIA;
-  let zeradoEm = -Infinity;
-  let bloqueio = null;
-  for (const f of faltas) {
-    const contando = faltas.filter((g) => g.em <= f.em && g.em > Math.max(zeradoEm, f.em - janela));
-    if (contando.length >= PENALIDADE.faltas) {
-      bloqueio = { desde: f.em, ate: f.em + PENALIDADE.diasBloqueio * DIA };
-      zeradoEm = f.em;
-    }
-  }
-
+  const geradas = Math.max(0, faltas.length - (PENALIDADE.faltas - 1));
   return {
-    faltas: faltas.slice().reverse(),
-    contando: faltas.filter((f) => f.em > Math.max(zeradoEm, ms - janela)).length,
+    faltas,
+    total: faltas.length,
     limite: PENALIDADE.faltas,
-    bloqueadoAte: bloqueio && ms < bloqueio.ate ? bloqueio.ate : null,
+    pendentes: Math.max(0, geradas - penalizadas(usuario.email)),
     // A regra só tira o desconto de quem tem desconto.
     aplica: perfilDe(usuario).categoria === 'estudante',
   };
 }
 
-// Categoria de preço que vale agora: a do perfil, ou "demais" durante o bloqueio.
-export function categoriaAplicada(usuario, agora) {
+// Categorias de preço das próximas n reservas, em ordem: as primeiras pagam como "demais"
+// enquanto houver penalidade pendente.
+export function categoriasDasProximas(usuario, n, agora) {
   const s = situacaoFaltas(usuario, agora);
-  return s.aplica && s.bloqueadoAte ? 'demais' : perfilDe(usuario).categoria;
+  const base = perfilDe(usuario).categoria;
+  const sem = s.aplica ? s.pendentes : 0;
+  return Array.from({ length: n }, (_, i) => (i < sem ? 'demais' : base));
+}
+
+// Categoria de preço da próxima reserva.
+export function categoriaAplicada(usuario, agora) {
+  return categoriasDasProximas(usuario, 1, agora)[0];
 }
 
 // ---------- Reservas ----------
 
+const somaExtras = (extras) => extras.reduce((t, e) => t + ADICIONAIS[e].preco, 0);
+
 export function precoDe(usuario, extras, agora) {
-  return CATEGORIAS[categoriaAplicada(usuario, agora)].preco + extras.reduce((t, e) => t + ADICIONAIS[e].preco, 0);
+  return CATEGORIAS[categoriaAplicada(usuario, agora)].preco + somaExtras(extras);
 }
 
-function codigoAleatorio() {
+export function novoCodigo() {
   const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   const s = Array.from(bytes, (b) => alfabeto[b % alfabeto.length]).join('');
   return `${s.slice(0, 4)}-${s.slice(4)}`;
 }
 
+export const novoId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+
+// Só as reservas feitas pela pessoa (sem os registros de "sem reserva" do balcão).
 export function reservasDoUsuario() {
   const s = sessao();
   if (!s) return [];
-  return ler(K.reservas, []).filter((r) => r.email === s.email);
-}
-
-export function reservaAtiva(data, refeicao) {
-  return reservasDoUsuario().find((r) => r.data === data && r.refeicao === refeicao && r.status === 'ativa');
+  return ler(K.reservas, []).filter((r) => r.email === s.email && !r.semReserva);
 }
 
 export function buscarReserva(id) {
@@ -186,25 +183,31 @@ export function reservaVigente(data, refeicao) {
     && (r.status === 'ativa' || r.status === 'utilizada'));
 }
 
-const novoId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+const ordemRefeicoes = Object.keys(REFEICOES);
+const porData = (a, b) => a.data.localeCompare(b.data)
+  || ordemRefeicoes.indexOf(a.refeicao) - ordemRefeicoes.indexOf(b.refeicao);
 
 // Cria várias reservas de uma vez (RF07). Todas guardam o mesmo `pedido`, o que permite
-// um pagamento só para o grupo quando houver PIX. O preço fica fixado na hora da reserva.
+// um pagamento só para o grupo quando houver PIX. O preço fica fixado na hora da reserva;
+// a penalidade pendente cai nas refeições mais próximas.
 export function criarReservas(itens, agora) {
   const usuario = usuarioAtual();
-  const categoria = categoriaAplicada(usuario, agora);
+  const ordenados = [...itens].sort(porData);
+  const categorias = categoriasDasProximas(usuario, ordenados.length, agora);
+  const base = perfilDe(usuario).categoria;
   const pedido = novoId();
-  const novas = itens.map(({ data, refeicao, extras }) => ({
+  const novas = ordenados.map(({ data, refeicao, extras }, i) => ({
     id: novoId(),
     v: VERSAO,
     pedido,
-    codigo: codigoAleatorio(),
+    codigo: novoCodigo(),
     email: usuario.email,
     data,
     refeicao,
     extras,
-    categoria,
-    valor: precoDe(usuario, extras, agora),
+    categoria: categorias[i],
+    valor: CATEGORIAS[categorias[i]].preco + somaExtras(extras),
+    ...(categorias[i] !== base ? { penalizada: true } : {}),
     status: 'ativa',
     criadaEm: agora.getTime(),
   }));
@@ -225,13 +228,120 @@ export function cancelarReserva(id, agora) {
   }));
 }
 
-// No sistema real quem faz isto é o caixa, lendo o QR Code. No protótipo serve para testar as faltas.
-export function registrarCheckin(id, agora) {
-  gravar(K.reservas, ler(K.reservas, []).map((r) =>
-    r.id === id ? { ...r, status: 'utilizada', checkinEm: agora.getTime() } : r));
+function alterarReserva(id, fn) {
+  let alterada = null;
+  gravar(K.reservas, ler(K.reservas, []).map((r) => (r.id === id ? (alterada = fn(r)) : r)));
+  return alterada;
+}
+
+// Check-in no balcão (o caixa lê o QR Code ou busca o nome). Com `forma`, registra o
+// pagamento junto, se a reserva ainda não estava paga. Sem `forma`, só a entrada.
+export function registrarCheckin(id, agora, forma) {
+  const em = agora.getTime();
+  return alterarReserva(id, (r) => ({
+    ...r,
+    status: 'utilizada',
+    checkinEm: em,
+    ...(r.pagamento || !forma ? {} : { pagamento: { forma, valor: r.valor, em } }),
+  }));
 }
 
 export function apagarTudo() {
-  Object.values(K).forEach((k) => gravar(k, null));
-  try { localStorage.removeItem('ru.demoOffset'); } catch { /* sem armazenamento */ }
+  apagarDados();
+  carregarAjustes();
+}
+
+// ---------- Equipe ----------
+
+export function sessaoEquipe() {
+  return ler(K.equipe, null);
+}
+
+export function entrarEquipe(papel) {
+  gravar(K.equipe, { papel });
+}
+
+export function sairEquipe() {
+  gravar(K.equipe, null);
+}
+
+export const todasReservas = () => ler(K.reservas, []);
+export const mapaUsuarios = () => ler(K.usuarios, {});
+export const usuarioPorEmail = (email) => ler(K.usuarios, {})[email] || null;
+
+// Situação para a equipe: 'aguardando', 'veio', 'falta', 'abonada' (falta perdoada) ou 'cancelada'.
+export function situacao(r, agora) {
+  if (faltaBruta(r, agora)) return r.abonada ? 'abonada' : 'falta';
+  if (r.status === 'cancelada') return 'cancelada';
+  if (r.status === 'utilizada') return 'veio';
+  return 'aguardando';
+}
+
+// Aceita "RU:ABCD-EFGH" (o conteúdo do QR Code), "ABCD-EFGH" ou "abcdefgh".
+export function buscarCodigo(texto) {
+  const limpo = String(texto).toUpperCase().replace(/^\s*RU:/, '').replace(/[^A-Z0-9]/g, '');
+  if (limpo.length !== 8) return null;
+  return todasReservas().find((r) => r.codigo && r.codigo.replace('-', '') === limpo) || null;
+}
+
+// Desfaz o check-in e o pagamento feito junto com ele. Um registro sem reserva é apagado.
+export function desfazerCheckin(id) {
+  const r = todasReservas().find((x) => x.id === id);
+  if (!r) return;
+  if (r.semReserva) {
+    gravar(K.reservas, todasReservas().filter((x) => x.id !== id));
+    return;
+  }
+  alterarReserva(id, ({ checkinEm, pagamento, ...resto }) => ({
+    ...resto,
+    status: 'ativa',
+    ...(pagamento && pagamento.em !== checkinEm ? { pagamento } : {}),
+  }));
+}
+
+// Quem comeu sem reserva (RN09). Com `email`, liga o registro a uma pessoa cadastrada:
+// o preço segue o perfil dela, e uma penalidade pendente é aplicada aqui também.
+export function registrarSemReserva({ data, refeicao, email, nome, categoria, extras, forma }, agora) {
+  const em = agora.getTime();
+  const usuario = email ? usuarioPorEmail(email) : null;
+  const cat = usuario ? categoriaAplicada(usuario, agora) : categoria;
+  const valor = CATEGORIAS[cat].preco + somaExtras(extras);
+  const registro = {
+    id: novoId(),
+    v: VERSAO,
+    codigo: null,
+    email: usuario ? email : null,
+    nome: usuario ? '' : nome || '',
+    data,
+    refeicao,
+    extras,
+    categoria: cat,
+    valor,
+    ...(usuario && cat !== perfilDe(usuario).categoria ? { penalizada: true } : {}),
+    status: 'utilizada',
+    semReserva: true,
+    criadaEm: em,
+    checkinEm: em,
+    pagamento: { forma, valor, em },
+  };
+  gravar(K.reservas, [...todasReservas(), registro]);
+  return registro;
+}
+
+export function abonarFalta(id, abonada) {
+  return alterarReserva(id, (r) => ({ ...r, abonada }));
+}
+
+// Troca os dados de exemplo anteriores pelos novos e mantém os demais.
+export function importarExemplo({ usuarios, reservas }) {
+  removerExemplo();
+  const atuais = ler(K.usuarios, {});
+  usuarios.forEach((u) => { atuais[u.email] = u; });
+  gravar(K.usuarios, atuais);
+  gravar(K.reservas, [...todasReservas(), ...reservas]);
+}
+
+export function removerExemplo() {
+  gravar(K.usuarios, Object.fromEntries(Object.entries(ler(K.usuarios, {})).filter(([, u]) => !u.exemplo)));
+  gravar(K.reservas, todasReservas().filter((r) => !r.exemplo));
 }
