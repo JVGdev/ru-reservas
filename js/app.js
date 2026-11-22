@@ -1,6 +1,6 @@
 import {
   PERFIS, CATEGORIAS, ADICIONAIS, REFEICOES, TAGS, ACOMPANHAMENTO, FORMAS_PAGAMENTO,
-  cardapioDo, semanasDoCalendario, semanaDe,
+  cardapioDo, semanasDoCalendario,
 } from './data.js';
 import * as store from './store.js';
 import * as t from './time.js';
@@ -424,7 +424,6 @@ function telaCalendario() {
 // ---------- Vários dias (RF07) ----------
 
 const chave = (iso, r) => `${iso}|${r}`;
-const PLURAIS = { almoco: 'Almoços', jantar: 'Jantares' };
 
 // Refeições que ainda dá para reservar, na ordem do calendário.
 function refeicoesAbertas(agora) {
@@ -452,85 +451,36 @@ function textoBotaoVarias(agora) {
   return `Reservar ${n} ${n === 1 ? 'refeição' : 'refeições'} · ${reais(total)}`;
 }
 
-// Uma célula da grade, com o mesmo botão de refeição do Início: marcar/desmarcar,
-// ou o estado quando não dá para marcar.
-function celulaVarias(iso, r, agora) {
+function toggleRefeicao(iso, r, agora) {
   const s = situacao(iso, r, agora);
   const nome = REFEICOES[r].nome;
-  const rotulo = `${nome}, ${t.dataLonga(iso)}`;
   if (s.tipo === 'reservado') {
-    return `<a class="refeicao reservada compacta" href="#/reserva/${s.reserva.id}" aria-label="${esc(`${rotulo}: reservado`)}">
-      <span class="ref-nome">${ICONES.check}${nome}</span><span class="ref-status">Reservado</span></a>`;
+    return `<a class="toggle reservada" href="#/reserva/${s.reserva.id}">${ICONES.check}${nome}<span>Reservado</span></a>`;
   }
   if (s.tipo === 'fechado') {
-    return `<span class="refeicao fechada compacta" aria-label="${esc(`${rotulo}: fechou`)}">
-      <span class="ref-nome">${nome}</span><span class="ref-status">Fechou</span></span>`;
+    return `<span class="toggle fechada" aria-disabled="true">${nome}<span>Fechou</span></span>`;
   }
   const marcado = varias.selecao.has(chave(iso, r));
-  return `<button type="button" class="refeicao compacta${marcado ? ' marcado' : ''}" data-acao="marcar" data-chave="${chave(iso, r)}"
-    data-semana="${semanaDe(iso)}" data-refeicao="${r}" aria-pressed="${marcado}" aria-label="${esc(rotulo)}">
-    <span class="ref-nome"><span class="i-mais">${ICONES.mais}</span><span class="i-check">${ICONES.check}</span>${nome}</span></button>`;
-}
-
-// Chaves das refeições abertas de uma semana, só de um tipo (almoço ou jantar).
-function abertasDaColuna(semana, refeicao, agora) {
-  return refeicoesAbertas(agora).filter((k) => {
-    const [iso, r] = k.split('|');
-    return r === refeicao && semanaDe(iso) === semana;
-  });
-}
-
-function colunaCheia(semana, refeicao, agora) {
-  const abertas = abertasDaColuna(semana, refeicao, agora);
-  return abertas.length > 0 && abertas.every((k) => varias.selecao.has(k));
-}
-
-function nomeSemana(semana, agora) {
-  const atual = semanaDe(t.isoDate(agora));
-  if (semana === atual) return 'Esta semana';
-  if (semana === t.isoDate(t.addDays(t.parseISO(atual), 7))) return 'Próxima semana';
-  return `Semana de ${semana.slice(8)}/${semana.slice(5, 7)}`;
-}
-
-function semanaVarias(semana, dias, agora) {
-  const cabeca = ORDEM_REFEICOES.map((r) => {
-    const abertas = abertasDaColuna(semana, r, agora);
-    const nome = PLURAIS[r] || REFEICOES[r].nome;
-    return `<button type="button" class="botao secundario pequeno coluna" data-acao="marcar-coluna" data-semana="${semana}" data-refeicao="${r}"
-      aria-pressed="${colunaCheia(semana, r, agora)}" ${abertas.length ? '' : 'disabled'}
-      aria-label="${esc(`Marcar todos os ${nome.toLowerCase()} da semana`)}">${nome}</button>`;
-  }).join('');
-
-  const linhas = dias.map((iso) => {
-    const menu = cardapioDo(iso, agora);
-    const rel = t.relativo(iso, agora);
-    const dia = rel ? rel.replace(/^./, (c) => c.toUpperCase()) : `${t.diaSemana(iso)} ${Number(iso.slice(8))}`;
-    return `<li class="gv-linha">
-      <div class="gv-dia"><strong>${esc(dia)}</strong><span>${esc(menu.pratos[0].nome)}</span></div>
-      ${ORDEM_REFEICOES.map((r) => celulaVarias(iso, r, agora)).join('')}
-    </li>`;
-  }).join('');
-
-  return `<section class="cartao gv-semana" aria-label="${esc(nomeSemana(semana, agora))}">
-    <div class="gv-linha gv-cabeca"><h2>${esc(nomeSemana(semana, agora))}</h2>${cabeca}</div>
-    <ul class="gv-dias">${linhas}</ul>
-  </section>`;
+  return `<button type="button" class="toggle${marcado ? ' marcado' : ''}" data-acao="marcar" data-chave="${chave(iso, r)}"
+    aria-pressed="${marcado}" aria-label="${esc(`${nome}, ${t.dataLonga(iso)}`)}">${ICONES.check}${nome}<span>${textoPrazo(iso, r, agora)}</span></button>`;
 }
 
 function telaVarias() {
   const agora = t.now();
   const usuario = store.usuarioAtual();
   limparSelecao(agora);
-  // Dias sem nada para marcar nem reserva para mostrar (como hoje depois do jantar) ficam de fora.
-  const dias = diasDisponiveis(agora).filter((iso) =>
-    ORDEM_REFEICOES.some((r) => situacao(iso, r, agora).tipo !== 'fechado'));
+  const dias = diasDisponiveis(agora);
 
-  const semanas = new Map();
-  dias.forEach((iso) => {
-    const s = semanaDe(iso);
-    if (!semanas.has(s)) semanas.set(s, []);
-    semanas.get(s).push(iso);
-  });
+  const linhas = dias.map((iso) => {
+    const menu = cardapioDo(iso, agora);
+    return `<li class="linha-dia">
+      <div class="ld-info">
+        <strong>${esc(t.quando(iso, agora).replace(/^./, (c) => c.toUpperCase()))}</strong>
+        <span class="dica">${esc(menu.pratos[0].nome)}</span>
+      </div>
+      <div class="ld-refeicoes">${ORDEM_REFEICOES.map((r) => toggleRefeicao(iso, r, agora)).join('')}</div>
+    </li>`;
+  }).join('');
 
   const extras = Object.entries(ADICIONAIS).map(([id, a]) => `
     <label class="opcao">
@@ -539,35 +489,31 @@ function telaVarias() {
       <span class="opcao-preco">+ ${reais(a.preco)} cada</span>
     </label>`).join('');
 
-  const prazos = ORDEM_REFEICOES.map((r) => `${REFEICOES[r].nome.toLowerCase()} até ${t.hora(REFEICOES[r].corte)}`).join(' e ');
-
   pagina('inicio', `
     <header class="topo">${botaoVoltar()}<h1>Vários dias</h1></header>
     ${dias.length ? `
-      <p class="dica">Reservas: ${prazos} do próprio dia.</p>
-      ${[...semanas].map(([semana, ds]) => semanaVarias(semana, ds, agora)).join('')}
+      <div class="atalhos" role="group" aria-label="Marcar de uma vez">
+        <span class="dica">Marcar todos:</span>
+        <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="almoco">Almoços</button>
+        <button type="button" class="botao secundario pequeno" data-acao="marcar-todos" data-refeicao="jantar">Jantares</button>
+        <button type="button" class="botao texto pequeno" data-acao="limpar-varias">Limpar</button>
+      </div>
+      <ul class="lista-dias">${linhas}</ul>
       <div class="opcoes">${extras}</div>
       <div class="barra-confirmar">
         <button type="button" class="botao primario grande" data-acao="confirmar-varias" id="confirmar-varias"
           ${varias.selecao.size ? '' : 'disabled'}>${textoBotaoVarias(agora)}</button>
-        <div class="barra-linha">
-          <p class="dica">${esc(textoCategoria(usuario, agora))} · pagamento no balcão</p>
-          <button type="button" class="link" data-acao="limpar-varias" id="limpar-varias" ${varias.selecao.size ? '' : 'hidden'}>Limpar</button>
-        </div>
+        <p class="dica centro">${esc(textoCategoria(usuario, agora))} · pagamento no balcão</p>
       </div>`
     : '<p class="vazio-curto">Nenhum cardápio publicado para os próximos dias.</p>'}`);
 }
 
-// Atualiza o botão de confirmar e os cabeçalhos das colunas, sem redesenhar a tela (mantém o foco e a rolagem).
+// Atualiza só o botão de confirmar, sem redesenhar a tela (mantém o foco e a rolagem).
 function atualizarBarraVarias() {
-  const agora = t.now();
   const botao = document.getElementById('confirmar-varias');
   if (!botao) return;
-  botao.textContent = textoBotaoVarias(agora);
+  botao.textContent = textoBotaoVarias(t.now());
   botao.disabled = varias.selecao.size === 0;
-  document.getElementById('limpar-varias').hidden = varias.selecao.size === 0;
-  document.querySelectorAll('[data-acao="marcar-coluna"]').forEach((el) =>
-    el.setAttribute('aria-pressed', String(colunaCheia(el.dataset.semana, el.dataset.refeicao, agora))));
 }
 
 function confirmarVarias() {
@@ -918,18 +864,9 @@ const acoes = {
     el.setAttribute('aria-pressed', String(marcado));
     atualizarBarraVarias();
   },
-  // Marca todas as refeições abertas da coluna naquela semana; se já estavam todas marcadas, desmarca.
-  'marcar-coluna': (el) => {
-    const agora = t.now();
-    const { semana, refeicao } = el.dataset;
-    const cheia = colunaCheia(semana, refeicao, agora);
-    abertasDaColuna(semana, refeicao, agora).forEach((k) => (cheia ? varias.selecao.delete(k) : varias.selecao.add(k)));
-    document.querySelectorAll(`.refeicao[data-semana="${semana}"][data-refeicao="${refeicao}"]`).forEach((c) => {
-      const marcado = varias.selecao.has(c.dataset.chave);
-      c.classList.toggle('marcado', marcado);
-      c.setAttribute('aria-pressed', String(marcado));
-    });
-    atualizarBarraVarias();
+  'marcar-todos': (el) => {
+    refeicoesAbertas(t.now()).filter((k) => k.endsWith(`|${el.dataset.refeicao}`)).forEach((k) => varias.selecao.add(k));
+    rota();
   },
   'limpar-varias': () => { varias.selecao.clear(); rota(); },
   'confirmar-varias': confirmarVarias,
